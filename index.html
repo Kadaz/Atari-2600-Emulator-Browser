@@ -1,0 +1,3548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport"
+      content="width=device-width,
+               initial-scale=1.0,
+               maximum-scale=1.0,
+               user-scalable=no">
+
+<title>Retro Land - Atari 2600</title>
+
+<style>
+* {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    min-height: 100%;
+    background: #050505;
+    color: #f0f0f0;
+    font-family: Arial, Helvetica, sans-serif;
+    overflow-x: hidden;
+}
+
+body {
+    display: flex;
+    justify-content: center;
+}
+
+#app {
+    width: 100%;
+    max-width: 1000px;
+    padding: 16px;
+}
+
+h1 {
+    margin: 0 0 6px 0;
+    font-size: 24px;
+}
+
+.subtitle {
+    margin-bottom: 16px;
+    color: #aaa;
+    font-size: 13px;
+}
+
+.panel {
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 12px;
+}
+
+.row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+button,
+select,
+input[type="file"] {
+    font: inherit;
+}
+
+button,
+select {
+    background: #1c1c1c;
+    color: white;
+    border: 1px solid #444;
+    border-radius: 6px;
+    padding: 9px 12px;
+}
+
+button:active {
+    transform: scale(0.98);
+}
+
+#fileInput {
+    width: 100%;
+    max-width: 500px;
+}
+
+#status {
+    margin-top: 10px;
+    color: #aaa;
+    font-size: 13px;
+    white-space: pre-wrap;
+}
+
+#cpuInfo {
+    font-family: monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #bbb;
+}
+
+#screen {
+    display: block;
+    width: 100%;
+    max-width: 960px;
+    aspect-ratio: 4 / 3;
+    background: #000;
+    border: 2px solid #333;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    margin: 0 auto;
+}
+
+.controls {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    max-width: 420px;
+    margin: 0 auto;
+}
+
+.control {
+    min-height: 52px;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.control.empty {
+    visibility: hidden;
+}
+
+.small {
+    font-size: 12px;
+    color: #888;
+    margin-top: 10px;
+}
+
+.ok {
+    color: #8f8;
+}
+
+.warn {
+    color: #ffcc66;
+}
+</style>
+</head>
+
+<body>
+
+<div id="app">
+
+    <h1>Retro Land - Atari 2600</h1>
+    <div class="subtitle">
+        Atari 2600 browser emulator foundation
+    </div>
+
+    <div class="panel">
+
+        <div class="row">
+
+            <select id="romSelect">
+                <option value="">Select Atari 2600 ROM</option>
+            </select>
+
+            <button id="loadSelected">
+                LOAD ROM
+            </button>
+
+            <button id="resetButton">
+                RESET
+            </button>
+
+        </div>
+
+        <div style="margin-top:10px;">
+            <input id="fileInput"
+                   type="file"
+                   accept=".bin,.a26,.rom,application/octet-stream">
+        </div>
+
+        <div id="status">
+            Initializing Atari 2600...
+        </div>
+
+    </div>
+
+    <div class="panel">
+
+        <canvas id="screen"
+                width="320"
+                height="240">
+        </canvas>
+
+        <div class="small">
+            Video output will be connected to the TIA in the next step.
+        </div>
+
+    </div>
+
+    <div class="panel">
+
+        <div id="cpuInfo">
+            CPU: waiting for cartridge
+        </div>
+
+    </div>
+
+    <div class="panel">
+
+        <div class="controls">
+
+            <button class="control empty"></button>
+
+            <button class="control"
+                    data-control="up">
+                UP
+            </button>
+
+            <button class="control empty"></button>
+
+            <button class="control"
+                    data-control="left">
+                LEFT
+            </button>
+
+            <button class="control"
+                    data-control="fire">
+                FIRE
+            </button>
+
+            <button class="control"
+                    data-control="right">
+                RIGHT
+            </button>
+
+            <button class="control empty"></button>
+
+            <button class="control"
+                    data-control="down">
+                DOWN
+            </button>
+
+            <button class="control empty"></button>
+
+        </div>
+
+        <div class="small">
+            Keyboard:
+            Arrow Keys = Joystick · Space = Fire · R = Reset
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+"use strict";
+
+/*
+============================================================
+ Atari 2600
+ 6507 CPU FOUNDATION
+============================================================
+
+ This first stage intentionally contains:
+
+   - 6507-compatible 6502 CPU core
+   - 13-bit address bus
+   - cartridge loading
+   - 2K cartridge support
+   - 4K cartridge support
+   - RIOT RAM
+   - basic RIOT I/O placeholders
+   - reset vector handling
+   - instruction execution
+   - cycle accounting
+
+ TIA/video is NOT faked here.
+
+ The next stage will connect the real CPU bus to:
+   TIA
+   RIOT timer
+   scanline timing
+   framebuffer generation
+============================================================
+*/
+
+
+/* =========================================================
+   UTILITIES
+========================================================= */
+
+function u8(value) {
+    return value & 0xFF;
+}
+
+function u16(value) {
+    return value & 0xFFFF;
+}
+
+
+/* =========================================================
+   CARTRIDGE
+========================================================= */
+
+class AtariCartridge {
+
+    constructor() {
+        this.rom = null;
+        this.size = 0;
+    }
+
+    load(data) {
+
+        if (!(data instanceof Uint8Array)) {
+            data = new Uint8Array(data);
+        }
+
+        const size = data.length;
+
+        if (size !== 2048 &&
+            size !== 4096) {
+
+            throw new Error(
+                "This first cartridge stage supports only 2K and 4K ROMs. " +
+                "Loaded size: " + size + " bytes."
+            );
+        }
+
+        this.rom = new Uint8Array(data);
+        this.size = size;
+    }
+
+    read(address) {
+
+        if (!this.rom) {
+            return 0xEA;
+        }
+
+        /*
+         * The 6507 exposes only 13 address lines.
+         */
+        address &= 0x1FFF;
+
+        /*
+         * Cartridge area:
+         *
+         * $1000-$1FFF
+         *
+         * For a 4K cartridge the whole 4K is mapped.
+         *
+         * For a 2K cartridge the 2K image is mirrored
+         * throughout the 4K cartridge window.
+         */
+        let offset = address - 0x1000;
+
+        if (offset < 0) {
+            offset = 0;
+        }
+
+        if (this.size === 2048) {
+            offset &= 0x07FF;
+        } else {
+            offset &= 0x0FFF;
+        }
+
+        return this.rom[offset];
+    }
+}
+
+
+/* =========================================================
+   RIOT
+========================================================= */
+
+class Riot {
+
+    constructor() {
+
+        this.ram = new Uint8Array(128);
+
+        /*
+         * RIOT ports.
+         *
+         * These are kept here so the CPU bus is already
+         * structured correctly before we implement the
+         * complete timer/controller behavior.
+         */
+
+        this.swcha = 0xFF;
+        this.swacnt = 0x00;
+
+        this.swchb = 0xFF;
+        this.swbcnt = 0x00;
+
+        this.intim = 0;
+
+        this.timerRunning = false;
+        this.timerDivider = 0;
+        this.timerCounter = 0;
+    }
+
+    reset() {
+
+        this.ram.fill(0);
+
+        this.swcha = 0xFF;
+        this.swacnt = 0x00;
+
+        this.swchb = 0xFF;
+        this.swbcnt = 0x00;
+
+        this.intim = 0;
+
+        this.timerRunning = false;
+        this.timerDivider = 0;
+        this.timerCounter = 0;
+    }
+
+    read(address) {
+
+        address &= 0x3FF;
+
+        /*
+         * RAM mirror.
+         */
+        if ((address & 0x180) === 0x080) {
+
+            return this.ram[address & 0x7F];
+        }
+
+        /*
+         * RIOT I/O and timer.
+         */
+        switch (address & 0x1F) {
+
+            case 0x00:
+                return this.swcha;
+
+            case 0x02:
+                return this.swchb;
+
+            case 0x04:
+                return this.intim;
+
+            default:
+                return 0xFF;
+        }
+    }
+
+    write(address, value) {
+
+        address &= 0x3FF;
+        value &= 0xFF;
+
+        /*
+         * RAM.
+         */
+        if ((address & 0x180) === 0x080) {
+
+            this.ram[address & 0x7F] = value;
+            return;
+        }
+
+        switch (address & 0x1F) {
+
+            case 0x01:
+                this.swacnt = value;
+                break;
+
+            case 0x03:
+                this.swbcnt = value;
+                break;
+
+            case 0x14:
+                this.startTimer(value, 1);
+                break;
+
+            case 0x15:
+                this.startTimer(value, 8);
+                break;
+
+            case 0x16:
+                this.startTimer(value, 64);
+                break;
+
+            case 0x17:
+                this.startTimer(value, 1024);
+                break;
+        }
+    }
+
+    startTimer(value, divider) {
+
+        this.intim = value & 0xFF;
+        this.timerDivider = divider;
+        this.timerCounter = divider;
+        this.timerRunning = true;
+    }
+
+    tick(cpuCycles) {
+
+        if (!this.timerRunning) {
+            return;
+        }
+
+        for (let i = 0; i < cpuCycles; i++) {
+
+            this.timerCounter--;
+
+            if (this.timerCounter <= 0) {
+
+                this.timerCounter = this.timerDivider;
+
+                if (this.intim > 0) {
+                    this.intim--;
+                }
+            }
+        }
+    }
+}
+
+
+/* =========================================================
+   TIA PLACEHOLDER
+========================================================= */
+
+class TIA {
+
+    constructor() {
+
+        /*
+         * The registers are stored now so that CPU writes
+         * already have a real hardware destination.
+         *
+         * Rendering is intentionally NOT implemented yet.
+         */
+
+        this.registers = new Uint8Array(0x40);
+
+        this.colorClock = 0;
+        this.scanline = 0;
+
+        this.vsync = false;
+        this.vblank = false;
+
+        this.wsync = false;
+    }
+
+    reset() {
+
+        this.registers.fill(0);
+
+        this.colorClock = 0;
+        this.scanline = 0;
+
+        this.vsync = false;
+        this.vblank = false;
+
+        this.wsync = false;
+    }
+
+    read(address) {
+
+        /*
+         * TIA read registers:
+         *
+         * $30-$3D are collision/input registers.
+         *
+         * Until the complete collision system is implemented,
+         * return the hardware-like idle value.
+         */
+
+        address &= 0x3F;
+
+        switch (address) {
+
+            case 0x30:
+            case 0x31:
+            case 0x32:
+            case 0x33:
+            case 0x34:
+            case 0x35:
+            case 0x36:
+            case 0x37:
+                return 0x00;
+
+            case 0x38:
+            case 0x39:
+            case 0x3A:
+            case 0x3B:
+                return 0x80;
+
+            case 0x3C:
+            case 0x3D:
+                return 0x80;
+
+            default:
+                return 0x00;
+        }
+    }
+
+    write(address, value) {
+
+        address &= 0x3F;
+        value &= 0xFF;
+
+        this.registers[address] = value;
+
+        switch (address) {
+
+            case 0x00:
+                this.vsync = (value & 0x02) !== 0;
+                break;
+
+            case 0x01:
+                this.vblank = (value & 0x02) !== 0;
+                break;
+
+            case 0x02:
+                /*
+                 * WSYNC is a CPU/TIA synchronization event.
+                 * The CPU will be connected to this in the
+                 * timing stage.
+                 */
+                this.wsync = true;
+                break;
+
+            case 0x2A:
+                /*
+                 * HMOVE.
+                 *
+                 * Actual horizontal motion will be implemented
+                 * together with the beam renderer.
+                 */
+                break;
+        }
+    }
+
+    tickColorClocks(count) {
+
+        this.colorClock += count;
+
+        while (this.colorClock >= 228) {
+
+            this.colorClock -= 228;
+            this.scanline++;
+
+            if (this.scanline >= 262) {
+                this.scanline = 0;
+            }
+
+            this.wsync = false;
+        }
+    }
+}
+
+
+/* =========================================================
+   MEMORY BUS
+========================================================= */
+
+class AtariBus {
+
+    constructor() {
+
+        this.cartridge = new AtariCartridge();
+        this.riot = new Riot();
+        this.tia = new TIA();
+
+        this.controller = {
+            up: false,
+            down: false,
+            left: false,
+            right: false,
+            fire: false
+        };
+    }
+
+    reset() {
+
+        this.riot.reset();
+        this.tia.reset();
+    }
+
+    read(address) {
+
+        address &= 0x1FFF;
+
+        /*
+         * TIA area.
+         *
+         * The low 7 address bits select the TIA registers
+         * through the console's address decoding/mirroring.
+         */
+        if ((address & 0x1080) === 0x0000) {
+
+            return this.tia.read(address & 0x3F);
+        }
+
+        /*
+         * RIOT RAM / I/O.
+         */
+        if ((address & 0x1080) === 0x0080) {
+
+            return this.riot.read(address);
+        }
+
+        /*
+         * Cartridge.
+         */
+        if ((address & 0x1000) !== 0) {
+
+            return this.cartridge.read(address);
+        }
+
+        /*
+         * Unmapped area.
+         */
+        return 0xFF;
+    }
+
+    write(address, value) {
+
+        address &= 0x1FFF;
+        value &= 0xFF;
+
+        if ((address & 0x1080) === 0x0000) {
+
+            this.tia.write(address & 0x3F, value);
+            return;
+        }
+
+        if ((address & 0x1080) === 0x0080) {
+
+            this.riot.write(address, value);
+            return;
+        }
+
+        /*
+         * Cartridge writes are ignored for ordinary
+         * 2K/4K ROM cartridges.
+         */
+    }
+
+    tick(cpuCycles) {
+
+        /*
+         * One CPU cycle = three TIA color clocks.
+         */
+        this.tia.tickColorClocks(cpuCycles * 3);
+
+        this.riot.tick(cpuCycles);
+    }
+}
+
+
+/* =========================================================
+   6507 CPU
+========================================================= */
+
+class CPU6507 {
+
+    constructor(bus) {
+
+        this.bus = bus;
+
+        this.A = 0;
+        this.X = 0;
+        this.Y = 0;
+
+        this.SP = 0xFF;
+
+        /*
+         * Processor status:
+         *
+         * NV-BDIZC
+         *
+         * B is not a physical storage bit on the 6502,
+         * but keeping it here simplifies the emulator.
+         */
+        this.P = 0x24;
+
+        this.PC = 0;
+
+        this.cycles = 0;
+
+        this.totalCycles = 0;
+
+        this.halted = false;
+    }
+
+    reset() {
+
+        this.A = 0;
+        this.X = 0;
+        this.Y = 0;
+
+        this.SP = 0xFD;
+
+        this.P = 0x24;
+
+        this.halted = false;
+
+        /*
+         * Atari 2600 reset vector:
+         *
+         * $FFFC/$FFFD
+         *
+         * Because the 6507 only exposes 13 address lines,
+         * this is mirrored into the cartridge area.
+         */
+        const lo = this.read(0x1FFC);
+        const hi = this.read(0x1FFD);
+
+        this.PC = (hi << 8) | lo;
+
+        /*
+         * Keep execution within the 13-bit address space.
+         */
+        this.PC &= 0x1FFF;
+
+        this.cycles = 0;
+        this.totalCycles = 0;
+    }
+
+    read(address) {
+
+        return this.bus.read(address & 0x1FFF);
+    }
+
+    write(address, value) {
+
+        this.bus.write(address & 0x1FFF, value);
+    }
+
+    fetchByte() {
+
+        const value = this.read(this.PC);
+
+        this.PC = (this.PC + 1) & 0x1FFF;
+
+        return value;
+    }
+
+    fetchWord() {
+
+        const lo = this.fetchByte();
+        const hi = this.fetchByte();
+
+        return lo | (hi << 8);
+    }
+
+    push(value) {
+
+        this.write(
+            0x0100 | this.SP,
+            value
+        );
+
+        this.SP = (this.SP - 1) & 0xFF;
+    }
+
+    pop() {
+
+        this.SP = (this.SP + 1) & 0xFF;
+
+        return this.read(
+            0x0100 | this.SP
+        );
+    }
+
+    setFlag(mask, state) {
+
+        if (state) {
+            this.P |= mask;
+        } else {
+            this.P &= ~mask;
+        }
+
+        this.P &= 0xFF;
+    }
+
+    getFlag(mask) {
+
+        return (this.P & mask) !== 0;
+    }
+
+    setZN(value) {
+
+        value &= 0xFF;
+
+        this.setFlag(0x02, value === 0);
+        this.setFlag(0x80, (value & 0x80) !== 0);
+
+        return value;
+    }
+
+    adc(value) {
+
+        value &= 0xFF;
+
+        const carry = this.getFlag(0x01) ? 1 : 0;
+
+        const a = this.A;
+
+        const result =
+            a +
+            value +
+            carry;
+
+        const binaryResult = result & 0xFF;
+
+        /*
+         * 6502 overflow:
+         *
+         * operands same sign,
+         * result different sign.
+         */
+        const overflow =
+            (~(a ^ value) &
+             (a ^ binaryResult) &
+             0x80) !== 0;
+
+        this.setFlag(0x01, result > 0xFF);
+        this.setFlag(0x40, overflow);
+
+        this.A = this.setZN(binaryResult);
+    }
+
+    sbc(value) {
+
+        value &= 0xFF;
+
+        const carry = this.getFlag(0x01) ? 1 : 0;
+
+        const a = this.A;
+
+        const result =
+            a -
+            value -
+            (1 - carry);
+
+        const binaryResult = result & 0xFF;
+
+        const overflow =
+            ((a ^ binaryResult) &
+             (a ^ value) &
+             0x80) !== 0;
+
+        this.setFlag(0x01, result >= 0);
+        this.setFlag(0x40, overflow);
+
+        this.A = this.setZN(binaryResult);
+    }
+
+    compare(registerValue, value) {
+
+        registerValue &= 0xFF;
+        value &= 0xFF;
+
+        const result =
+            (registerValue - value) & 0xFF;
+
+        this.setFlag(
+            0x01,
+            registerValue >= value
+        );
+
+        this.setZN(result);
+    }
+
+    addrZeroPage() {
+
+        return this.fetchByte();
+    }
+
+    addrZeroPageX() {
+
+        return (
+            this.fetchByte() +
+            this.X
+        ) & 0xFF;
+    }
+
+    addrZeroPageY() {
+
+        return (
+            this.fetchByte() +
+            this.Y
+        ) & 0xFF;
+    }
+
+    addrAbsolute() {
+
+        return this.fetchWord();
+    }
+
+    addrAbsoluteX() {
+
+        const base = this.fetchWord();
+
+        return (
+            base +
+            this.X
+        ) & 0xFFFF;
+    }
+
+    addrAbsoluteY() {
+
+        const base = this.fetchWord();
+
+        return (
+            base +
+            this.Y
+        ) & 0xFFFF;
+    }
+
+    addrIndirectX() {
+
+        const zp =
+            (this.fetchByte() + this.X) &
+            0xFF;
+
+        const lo =
+            this.read(zp);
+
+        const hi =
+            this.read((zp + 1) & 0xFF);
+
+        return lo | (hi << 8);
+    }
+
+    addrIndirectY() {
+
+        const zp =
+            this.fetchByte();
+
+        const lo =
+            this.read(zp);
+
+        const hi =
+            this.read((zp + 1) & 0xFF);
+
+        const base =
+            lo | (hi << 8);
+
+        return (
+            base +
+            this.Y
+        ) & 0xFFFF;
+    }
+
+    readIndirectBug(address) {
+
+        /*
+         * Original 6502 JMP indirect page-wrap behavior.
+         *
+         * JMP ($12FF) reads the high byte from $1200,
+         * not $1300.
+         */
+        const lo =
+            this.read(address);
+
+        const hiAddress =
+            (address & 0xFF00) |
+            ((address + 1) & 0x00FF);
+
+        const hi =
+            this.read(hiAddress);
+
+        return lo | (hi << 8);
+    }
+
+    branch(condition) {
+
+        const offset = this.fetchByte();
+
+        if (!condition) {
+            return 2;
+        }
+
+        const oldPC = this.PC;
+
+        let signedOffset = offset;
+
+        if (signedOffset & 0x80) {
+            signedOffset -= 0x100;
+        }
+
+        this.PC =
+            (this.PC + signedOffset) &
+            0x1FFF;
+
+        let cycles = 3;
+
+        if ((oldPC & 0xFF00) !==
+            (this.PC & 0xFF00)) {
+
+            cycles++;
+        }
+
+        return cycles;
+    }
+
+    step() {
+
+        if (this.halted) {
+            return 1;
+        }
+
+        const opcode =
+            this.fetchByte();
+
+        let cycles = 2;
+
+        switch (opcode) {
+
+            /* =================================================
+               BRK / ORA / ASL
+            ================================================= */
+
+            case 0x00: {
+                /*
+                 * BRK
+                 */
+                this.PC =
+                    (this.PC + 1) &
+                    0x1FFF;
+
+                this.push(
+                    (this.PC >> 8) & 0xFF
+                );
+
+                this.push(
+                    this.PC & 0xFF
+                );
+
+                this.push(
+                    this.P | 0x10
+                );
+
+                this.setFlag(0x04, true);
+
+                const lo =
+                    this.read(0x1FFE);
+
+                const hi =
+                    this.read(0x1FFF);
+
+                this.PC =
+                    ((hi << 8) | lo) &
+                    0x1FFF;
+
+                cycles = 7;
+                break;
+            }
+
+            case 0x01: {
+                const a = this.addrIndirectX();
+                this.A = this.setZN(
+                    this.A |
+                    this.read(a)
+                );
+                cycles = 6;
+                break;
+            }
+
+            case 0x05: {
+                const a = this.addrZeroPage();
+                this.A = this.setZN(
+                    this.A |
+                    this.read(a)
+                );
+                cycles = 3;
+                break;
+            }
+
+            case 0x06: {
+                const a = this.addrZeroPage();
+                const v = this.read(a);
+
+                this.setFlag(
+                    0x01,
+                    (v & 0x80) !== 0
+                );
+
+                const r =
+                    (v << 1) & 0xFF;
+
+                this.setZN(r);
+                this.write(a, r);
+
+                cycles = 5;
+                break;
+            }
+
+            case 0x09:
+                this.A = this.setZN(
+                    this.A |
+                    this.fetchByte()
+                );
+                cycles = 2;
+                break;
+
+            case 0x0A: {
+                const v = this.A;
+
+                this.setFlag(
+                    0x01,
+                    (v & 0x80) !== 0
+                );
+
+                this.A =
+                    this.setZN(
+                        (v << 1) & 0xFF
+                    );
+
+                cycles = 2;
+                break;
+            }
+
+            case 0x0D: {
+                const a = this.addrAbsolute();
+
+                this.A = this.setZN(
+                    this.A |
+                    this.read(a)
+                );
+
+                cycles = 4;
+                break;
+            }
+
+            case 0x0E: {
+                const a = this.addrAbsolute();
+                const v = this.read(a);
+
+                this.setFlag(
+                    0x01,
+                    (v & 0x80) !== 0
+                );
+
+                const r =
+                    (v << 1) & 0xFF;
+
+                this.setZN(r);
+                this.write(a, r);
+
+                cycles = 6;
+                break;
+            }
+
+            case 0x10:
+                cycles = this.branch(
+                    !this.getFlag(0x80)
+                );
+                break;
+
+            case 0x11: {
+                const a = this.addrIndirectY();
+
+                this.A = this.setZN(
+                    this.A |
+                    this.read(a)
+                );
+
+                cycles = 5;
+                break;
+            }
+
+            case 0x15: {
+                const a = this.addrZeroPageX();
+
+                this.A = this.setZN(
+                    this.A |
+                    this.read(a)
+                );
+
+                cycles = 4;
+                break;
+            }
+
+            case 0x16: {
+                const a = this.addrZeroPageX();
+                const v = this.read(a);
+
+                this.setFlag(
+                    0x01,
+                    (v & 0x80) !== 0
+                );
+
+                const r =
+                    (v << 1) & 0xFF;
+
+                this.setZN(r);
+                this.write(a, r);
+
+                cycles = 6;
+                break;
+            }
+
+            case 0x18:
+                this.setFlag(0x01, false);
+                cycles = 2;
+                break;
+
+            case 0x19: {
+                const a = this.addrAbsoluteY();
+
+                this.A = this.setZN(
+                    this.A |
+                    this.read(a)
+                );
+
+                cycles = 4;
+                break;
+            }
+
+            case 0x1D: {
+                const a = this.addrAbsoluteX();
+
+                this.A = this.setZN(
+                    this.A |
+                    this.read(a)
+                );
+
+                cycles = 4;
+                break;
+            }
+
+            case 0x1E: {
+                const a = this.addrAbsoluteX();
+                const v = this.read(a);
+
+                this.setFlag(
+                    0x01,
+                    (v & 0x80) !== 0
+                );
+
+                const r =
+                    (v << 1) & 0xFF;
+
+                this.setZN(r);
+                this.write(a, r);
+
+                cycles = 7;
+                break;
+            }
+
+
+            /* =================================================
+               AND
+            ================================================= */
+
+            case 0x21: {
+                const a = this.addrIndirectX();
+
+                this.A = this.setZN(
+                    this.A &
+                    this.read(a)
+                );
+
+                cycles = 6;
+                break;
+            }
+
+            case 0x25: {
+                const a = this.addrZeroPage();
+
+                this.A = this.setZN(
+                    this.A &
+                    this.read(a)
+                );
+
+                cycles = 3;
+                break;
+            }
+
+            case 0x29:
+                this.A = this.setZN(
+                    this.A &
+                    this.fetchByte()
+                );
+                cycles = 2;
+                break;
+
+            case 0x2D: {
+                const a = this.addrAbsolute();
+
+                this.A = this.setZN(
+                    this.A &
+                    this.read(a)
+                );
+
+                cycles = 4;
+                break;
+            }
+
+            case 0x31: {
+                const a = this.addrIndirectY();
+
+                this.A = this.setZN(
+                    this.A &
+                    this.read(a)
+                );
+
+                cycles = 5;
+                break;
+            }
+
+            case 0x35: {
+                const a = this.addrZeroPageX();
+
+                this.A = this.setZN(
+                    this.A &
+                    this.read(a)
+                );
+
+                cycles = 4;
+                break;
+            }
+
+            case 0x39: {
+                const a = this.addrAbsoluteY();
+
+                this.A = this.setZN(
+                    this.A &
+                    this.read(a)
+                );
+
+                cycles = 4;
+                break;
+            }
+
+            case 0x3D: {
+                const a = this.addrAbsoluteX();
+
+                this.A = this.setZN(
+                    this.A &
+                    this.read(a)
+                );
+
+                cycles = 4;
+                break;
+            }
+
+
+            /* =================================================
+               EOR
+            ================================================= */
+
+            case 0x41: {
+                const a = this.addrIndirectX();
+
+                this.A = this.setZN(
+                    this.A ^
+                    this.read(a)
+                );
+
+                cycles = 6;
+                break;
+            }
+
+            case 0x45: {
+                const a = this.addrZeroPage();
+
+                this.A = this.setZN(
+                    this.A ^
+                    this.read(a)
+                );
+
+                cycles = 3;
+                break;
+            }
+
+            case 0x49:
+                this.A = this.setZN(
+                    this.A ^
+                    this.fetchByte()
+                );
+                cycles = 2;
+                break;
+
+            case 0x4D: {
+                const a = this.addrAbsolute();
+
+                this.A = this.setZN(
+                    this.A ^
+                    this.read(a)
+                );
+
+                cycles = 4;
+                break;
+            }
+
+            case 0x51: {
+                const a = this.addrIndirectY();
+
+                this.A = this.setZN(
+                    this.A ^
+                    this.read(a)
+                );
+
+                cycles = 5;
+                break;
+            }
+
+            case 0x55: {
+                const a = this.addrZeroPageX();
+
+                this.A = this.setZN(
+                    this.A ^
+                    this.read(a)
+                );
+
+                cycles = 4;
+                break;
+            }
+
+            case 0x59: {
+                const a = this.addrAbsoluteY();
+
+                this.A = this.setZN(
+                    this.A ^
+                    this.read(a)
+                );
+
+                cycles = 4;
+                break;
+            }
+
+            case 0x5D: {
+                const a = this.addrAbsoluteX();
+
+                this.A = this.setZN(
+                    this.A ^
+                    this.read(a)
+                );
+
+                cycles = 4;
+                break;
+            }
+
+
+            /* =================================================
+               ADC
+            ================================================= */
+
+            case 0x61:
+                this.adc(
+                    this.read(
+                        this.addrIndirectX()
+                    )
+                );
+                cycles = 6;
+                break;
+
+            case 0x65:
+                this.adc(
+                    this.read(
+                        this.addrZeroPage()
+                    )
+                );
+                cycles = 3;
+                break;
+
+            case 0x69:
+                this.adc(this.fetchByte());
+                cycles = 2;
+                break;
+
+            case 0x6D:
+                this.adc(
+                    this.read(
+                        this.addrAbsolute()
+                    )
+                );
+                cycles = 4;
+                break;
+
+            case 0x71:
+                this.adc(
+                    this.read(
+                        this.addrIndirectY()
+                    )
+                );
+                cycles = 5;
+                break;
+
+            case 0x75:
+                this.adc(
+                    this.read(
+                        this.addrZeroPageX()
+                    )
+                );
+                cycles = 4;
+                break;
+
+            case 0x79:
+                this.adc(
+                    this.read(
+                        this.addrAbsoluteY()
+                    )
+                );
+                cycles = 4;
+                break;
+
+            case 0x7D:
+                this.adc(
+                    this.read(
+                        this.addrAbsoluteX()
+                    )
+                );
+                cycles = 4;
+                break;
+
+
+            /* =================================================
+               STA
+            ================================================= */
+
+            case 0x81:
+                this.write(
+                    this.addrIndirectX(),
+                    this.A
+                );
+                cycles = 6;
+                break;
+
+            case 0x85:
+                this.write(
+                    this.addrZeroPage(),
+                    this.A
+                );
+                cycles = 3;
+                break;
+
+            case 0x8D:
+                this.write(
+                    this.addrAbsolute(),
+                    this.A
+                );
+                cycles = 4;
+                break;
+
+            case 0x91:
+                this.write(
+                    this.addrIndirectY(),
+                    this.A
+                );
+                cycles = 6;
+                break;
+
+            case 0x95:
+                this.write(
+                    this.addrZeroPageX(),
+                    this.A
+                );
+                cycles = 4;
+                break;
+
+            case 0x99:
+                this.write(
+                    this.addrAbsoluteY(),
+                    this.A
+                );
+                cycles = 5;
+                break;
+
+            case 0x9D:
+                this.write(
+                    this.addrAbsoluteX(),
+                    this.A
+                );
+                cycles = 5;
+                break;
+
+
+            /* =================================================
+               STX
+            ================================================= */
+
+            case 0x86:
+                this.write(
+                    this.addrZeroPage(),
+                    this.X
+                );
+                cycles = 3;
+                break;
+
+            case 0x8E:
+                this.write(
+                    this.addrAbsolute(),
+                    this.X
+                );
+                cycles = 4;
+                break;
+
+            case 0x96:
+                this.write(
+                    this.addrZeroPageY(),
+                    this.X
+                );
+                cycles = 4;
+                break;
+
+
+            /* =================================================
+               STY
+            ================================================= */
+
+            case 0x84:
+                this.write(
+                    this.addrZeroPage(),
+                    this.Y
+                );
+                cycles = 3;
+                break;
+
+            case 0x8C:
+                this.write(
+                    this.addrAbsolute(),
+                    this.Y
+                );
+                cycles = 4;
+                break;
+
+            case 0x94:
+                this.write(
+                    this.addrZeroPageX(),
+                    this.Y
+                );
+                cycles = 4;
+                break;
+
+
+            /* =================================================
+               LDA
+            ================================================= */
+
+            case 0xA1:
+                this.A = this.setZN(
+                    this.read(
+                        this.addrIndirectX()
+                    )
+                );
+                cycles = 6;
+                break;
+
+            case 0xA5:
+                this.A = this.setZN(
+                    this.read(
+                        this.addrZeroPage()
+                    )
+                );
+                cycles = 3;
+                break;
+
+            case 0xA9:
+                this.A =
+                    this.setZN(
+                        this.fetchByte()
+                    );
+                cycles = 2;
+                break;
+
+            case 0xAD:
+                this.A = this.setZN(
+                    this.read(
+                        this.addrAbsolute()
+                    )
+                );
+                cycles = 4;
+                break;
+
+            case 0xB1:
+                this.A = this.setZN(
+                    this.read(
+                        this.addrIndirectY()
+                    )
+                );
+                cycles = 5;
+                break;
+
+            case 0xB5:
+                this.A = this.setZN(
+                    this.read(
+                        this.addrZeroPageX()
+                    )
+                );
+                cycles = 4;
+                break;
+
+            case 0xB9:
+                this.A = this.setZN(
+                    this.read(
+                        this.addrAbsoluteY()
+                    )
+                );
+                cycles = 4;
+                break;
+
+            case 0xBD:
+                this.A = this.setZN(
+                    this.read(
+                        this.addrAbsoluteX()
+                    )
+                );
+                cycles = 4;
+                break;
+
+
+            /* =================================================
+               LDX
+            ================================================= */
+
+            case 0xA2:
+                this.X =
+                    this.setZN(
+                        this.fetchByte()
+                    );
+                cycles = 2;
+                break;
+
+            case 0xA6:
+                this.X =
+                    this.setZN(
+                        this.read(
+                            this.addrZeroPage()
+                        )
+                    );
+                cycles = 3;
+                break;
+
+            case 0xAE:
+                this.X =
+                    this.setZN(
+                        this.read(
+                            this.addrAbsolute()
+                        )
+                    );
+                cycles = 4;
+                break;
+
+            case 0xB6:
+                this.X =
+                    this.setZN(
+                        this.read(
+                            this.addrZeroPageY()
+                        )
+                    );
+                cycles = 4;
+                break;
+
+            case 0xBE:
+                this.X =
+                    this.setZN(
+                        this.read(
+                            this.addrAbsoluteY()
+                        )
+                    );
+                cycles = 4;
+                break;
+
+
+            /* =================================================
+               LDY
+            ================================================= */
+
+            case 0xA0:
+                this.Y =
+                    this.setZN(
+                        this.fetchByte()
+                    );
+                cycles = 2;
+                break;
+
+            case 0xA4:
+                this.Y =
+                    this.setZN(
+                        this.read(
+                            this.addrZeroPage()
+                        )
+                    );
+                cycles = 3;
+                break;
+
+            case 0xAC:
+                this.Y =
+                    this.setZN(
+                        this.read(
+                            this.addrAbsolute()
+                        )
+                    );
+                cycles = 4;
+                break;
+
+            case 0xB4:
+                this.Y =
+                    this.setZN(
+                        this.read(
+                            this.addrZeroPageX()
+                        )
+                    );
+                cycles = 4;
+                break;
+
+            case 0xBC:
+                this.Y =
+                    this.setZN(
+                        this.read(
+                            this.addrAbsoluteX()
+                        )
+                    );
+                cycles = 4;
+                break;
+
+
+            /* =================================================
+               CMP
+            ================================================= */
+
+            case 0xC1:
+                this.compare(
+                    this.A,
+                    this.read(
+                        this.addrIndirectX()
+                    )
+                );
+                cycles = 6;
+                break;
+
+            case 0xC5:
+                this.compare(
+                    this.A,
+                    this.read(
+                        this.addrZeroPage()
+                    )
+                );
+                cycles = 3;
+                break;
+
+            case 0xC9:
+                this.compare(
+                    this.A,
+                    this.fetchByte()
+                );
+                cycles = 2;
+                break;
+
+            case 0xCD:
+                this.compare(
+                    this.A,
+                    this.read(
+                        this.addrAbsolute()
+                    )
+                );
+                cycles = 4;
+                break;
+
+            case 0xD1:
+                this.compare(
+                    this.A,
+                    this.read(
+                        this.addrIndirectY()
+                    )
+                );
+                cycles = 5;
+                break;
+
+            case 0xD5:
+                this.compare(
+                    this.A,
+                    this.read(
+                        this.addrZeroPageX()
+                    )
+                );
+                cycles = 4;
+                break;
+
+            case 0xD9:
+                this.compare(
+                    this.A,
+                    this.read(
+                        this.addrAbsoluteY()
+                    )
+                );
+                cycles = 4;
+                break;
+
+            case 0xDD:
+                this.compare(
+                    this.A,
+                    this.read(
+                        this.addrAbsoluteX()
+                    )
+                );
+                cycles = 4;
+                break;
+
+
+            /* =================================================
+               CPX
+            ================================================= */
+
+            case 0xE0:
+                this.compare(
+                    this.X,
+                    this.fetchByte()
+                );
+                cycles = 2;
+                break;
+
+            case 0xE4:
+                this.compare(
+                    this.X,
+                    this.read(
+                        this.addrZeroPage()
+                    )
+                );
+                cycles = 3;
+                break;
+
+            case 0xEC:
+                this.compare(
+                    this.X,
+                    this.read(
+                        this.addrAbsolute()
+                    )
+                );
+                cycles = 4;
+                break;
+
+
+            /* =================================================
+               CPY
+            ================================================= */
+
+            case 0xC0:
+                this.compare(
+                    this.Y,
+                    this.fetchByte()
+                );
+                cycles = 2;
+                break;
+
+            case 0xC4:
+                this.compare(
+                    this.Y,
+                    this.read(
+                        this.addrZeroPage()
+                    )
+                );
+                cycles = 3;
+                break;
+
+            case 0xCC:
+                this.compare(
+                    this.Y,
+                    this.read(
+                        this.addrAbsolute()
+                    )
+                );
+                cycles = 4;
+                break;
+
+
+            /* =================================================
+               SBC
+            ================================================= */
+
+            case 0xE1:
+                this.sbc(
+                    this.read(
+                        this.addrIndirectX()
+                    )
+                );
+                cycles = 6;
+                break;
+
+            case 0xE5:
+                this.sbc(
+                    this.read(
+                        this.addrZeroPage()
+                    )
+                );
+                cycles = 3;
+                break;
+
+            case 0xE9:
+                this.sbc(this.fetchByte());
+                cycles = 2;
+                break;
+
+            case 0xED:
+                this.sbc(
+                    this.read(
+                        this.addrAbsolute()
+                    )
+                );
+                cycles = 4;
+                break;
+
+            case 0xF1:
+                this.sbc(
+                    this.read(
+                        this.addrIndirectY()
+                    )
+                );
+                cycles = 5;
+                break;
+
+            case 0xF5:
+                this.sbc(
+                    this.read(
+                        this.addrZeroPageX()
+                    )
+                );
+                cycles = 4;
+                break;
+
+            case 0xF9:
+                this.sbc(
+                    this.read(
+                        this.addrAbsoluteY()
+                    )
+                );
+                cycles = 4;
+                break;
+
+            case 0xFD:
+                this.sbc(
+                    this.read(
+                        this.addrAbsoluteX()
+                    )
+                );
+                cycles = 4;
+                break;
+
+
+            /* =================================================
+               INC / DEC
+            ================================================= */
+
+            case 0xC6: {
+                const a = this.addrZeroPage();
+                const r =
+                    (this.read(a) - 1) & 0xFF;
+
+                this.setZN(r);
+                this.write(a, r);
+
+                cycles = 5;
+                break;
+            }
+
+            case 0xCE: {
+                const a = this.addrAbsolute();
+                const r =
+                    (this.read(a) - 1) & 0xFF;
+
+                this.setZN(r);
+                this.write(a, r);
+
+                cycles = 6;
+                break;
+            }
+
+            case 0xD6: {
+                const a = this.addrZeroPageX();
+                const r =
+                    (this.read(a) - 1) & 0xFF;
+
+                this.setZN(r);
+                this.write(a, r);
+
+                cycles = 6;
+                break;
+            }
+
+            case 0xDE: {
+                const a = this.addrAbsoluteX();
+                const r =
+                    (this.read(a) - 1) & 0xFF;
+
+                this.setZN(r);
+                this.write(a, r);
+
+                cycles = 7;
+                break;
+            }
+
+            case 0xE6: {
+                const a = this.addrZeroPage();
+                const r =
+                    (this.read(a) + 1) & 0xFF;
+
+                this.setZN(r);
+                this.write(a, r);
+
+                cycles = 5;
+                break;
+            }
+
+            case 0xEE: {
+                const a = this.addrAbsolute();
+                const r =
+                    (this.read(a) + 1) & 0xFF;
+
+                this.setZN(r);
+                this.write(a, r);
+
+                cycles = 6;
+                break;
+            }
+
+            case 0xF6: {
+                const a = this.addrZeroPageX();
+                const r =
+                    (this.read(a) + 1) & 0xFF;
+
+                this.setZN(r);
+                this.write(a, r);
+
+                cycles = 6;
+                break;
+            }
+
+            case 0xFE: {
+                const a = this.addrAbsoluteX();
+                const r =
+                    (this.read(a) + 1) & 0xFF;
+
+                this.setZN(r);
+                this.write(a, r);
+
+                cycles = 7;
+                break;
+            }
+
+
+            /* =================================================
+               ASL accumulator
+            ================================================= */
+
+            case 0x0A:
+                break;
+
+
+            /* =================================================
+               LSR
+            ================================================= */
+
+            case 0x46: {
+                const a = this.addrZeroPage();
+                const v = this.read(a);
+
+                this.setFlag(
+                    0x01,
+                    (v & 1) !== 0
+                );
+
+                const r =
+                    (v >> 1) & 0xFF;
+
+                this.setZN(r);
+                this.write(a, r);
+
+                cycles = 5;
+                break;
+            }
+
+            case 0x4A: {
+
+                const v = this.A;
+
+                this.setFlag(
+                    0x01,
+                    (v & 1) !== 0
+                );
+
+                this.A =
+                    this.setZN(
+                        v >> 1
+                    );
+
+                cycles = 2;
+                break;
+            }
+
+            case 0x4E: {
+                const a = this.addrAbsolute();
+                const v = this.read(a);
+
+                this.setFlag(
+                    0x01,
+                    (v & 1) !== 0
+                );
+
+                const r =
+                    v >> 1;
+
+                this.setZN(r);
+                this.write(a, r);
+
+                cycles = 6;
+                break;
+            }
+
+            case 0x56: {
+                const a = this.addrZeroPageX();
+                const v = this.read(a);
+
+                this.setFlag(
+                    0x01,
+                    (v & 1) !== 0
+                );
+
+                const r =
+                    v >> 1;
+
+                this.setZN(r);
+                this.write(a, r);
+
+                cycles = 6;
+                break;
+            }
+
+            case 0x5E: {
+                const a = this.addrAbsoluteX();
+                const v = this.read(a);
+
+                this.setFlag(
+                    0x01,
+                    (v & 1) !== 0
+                );
+
+                const r =
+                    v >> 1;
+
+                this.setZN(r);
+                this.write(a, r);
+
+                cycles = 7;
+                break;
+            }
+
+
+            /* =================================================
+               ROL
+            ================================================= */
+
+            case 0x26: {
+                const a = this.addrZeroPage();
+                const v = this.read(a);
+
+                const oldCarry =
+                    this.getFlag(0x01)
+                        ? 1
+                        : 0;
+
+                this.setFlag(
+                    0x01,
+                    (v & 0x80) !== 0
+                );
+
+                const r =
+                    ((v << 1) |
+                     oldCarry) & 0xFF;
+
+                this.setZN(r);
+                this.write(a, r);
+
+                cycles = 5;
+                break;
+            }
+
+            case 0x2A: {
+
+                const v = this.A;
+
+                const oldCarry =
+                    this.getFlag(0x01)
+                        ? 1
+                        : 0;
+
+                this.setFlag(
+                    0x01,
+                    (v & 0x80) !== 0
+                );
+
+                this.A =
+                    this.setZN(
+                        ((v << 1) |
+                         oldCarry) & 0xFF
+                    );
+
+                cycles = 2;
+                break;
+            }
+
+            case 0x2E: {
+                const a = this.addrAbsolute();
+                const v = this.read(a);
+
+                const oldCarry =
+                    this.getFlag(0x01)
+                        ? 1
+                        : 0;
+
+                this.setFlag(
+                    0x01,
+                    (v & 0x80) !== 0
+                );
+
+                const r =
+                    ((v << 1) |
+                     oldCarry) & 0xFF;
+
+                this.setZN(r);
+                this.write(a, r);
+
+                cycles = 6;
+                break;
+            }
+
+            case 0x36: {
+                const a = this.addrZeroPageX();
+                const v = this.read(a);
+
+                const oldCarry =
+                    this.getFlag(0x01)
+                        ? 1
+                        : 0;
+
+                this.setFlag(
+                    0x01,
+                    (v & 0x80) !== 0
+                );
+
+                const r =
+                    ((v << 1) |
+                     oldCarry) & 0xFF;
+
+                this.setZN(r);
+                this.write(a, r);
+
+                cycles = 6;
+                break;
+            }
+
+            case 0x3E: {
+                const a = this.addrAbsoluteX();
+                const v = this.read(a);
+
+                const oldCarry =
+                    this.getFlag(0x01)
+                        ? 1
+                        : 0;
+
+                this.setFlag(
+                    0x01,
+                    (v & 0x80) !== 0
+                );
+
+                const r =
+                    ((v << 1) |
+                     oldCarry) & 0xFF;
+
+                this.setZN(r);
+                this.write(a, r);
+
+                cycles = 7;
+                break;
+            }
+
+
+            /* =================================================
+               ROR
+            ================================================= */
+
+            case 0x66: {
+                const a = this.addrZeroPage();
+                const v = this.read(a);
+
+                const oldCarry =
+                    this.getFlag(0x01)
+                        ? 1
+                        : 0;
+
+                this.setFlag(
+                    0x01,
+                    (v & 1) !== 0
+                );
+
+                const r =
+                    (v >> 1) |
+                    (oldCarry << 7);
+
+                this.setZN(r);
+                this.write(a, r);
+
+                cycles = 5;
+                break;
+            }
+
+            case 0x6A: {
+
+                const v = this.A;
+
+                const oldCarry =
+                    this.getFlag(0x01)
+                        ? 1
+                        : 0;
+
+                this.setFlag(
+                    0x01,
+                    (v & 1) !== 0
+                );
+
+                this.A =
+                    this.setZN(
+                        (v >> 1) |
+                        (oldCarry << 7)
+                    );
+
+                cycles = 2;
+                break;
+            }
+
+            case 0x6E: {
+                const a = this.addrAbsolute();
+                const v = this.read(a);
+
+                const oldCarry =
+                    this.getFlag(0x01)
+                        ? 1
+                        : 0;
+
+                this.setFlag(
+                    0x01,
+                    (v & 1) !== 0
+                );
+
+                const r =
+                    (v >> 1) |
+                    (oldCarry << 7);
+
+                this.setZN(r);
+                this.write(a, r);
+
+                cycles = 6;
+                break;
+            }
+
+            case 0x76: {
+                const a = this.addrZeroPageX();
+                const v = this.read(a);
+
+                const oldCarry =
+                    this.getFlag(0x01)
+                        ? 1
+                        : 0;
+
+                this.setFlag(
+                    0x01,
+                    (v & 1) !== 0
+                );
+
+                const r =
+                    (v >> 1) |
+                    (oldCarry << 7);
+
+                this.setZN(r);
+                this.write(a, r);
+
+                cycles = 6;
+                break;
+            }
+
+            case 0x7E: {
+                const a = this.addrAbsoluteX();
+                const v = this.read(a);
+
+                const oldCarry =
+                    this.getFlag(0x01)
+                        ? 1
+                        : 0;
+
+                this.setFlag(
+                    0x01,
+                    (v & 1) !== 0
+                );
+
+                const r =
+                    (v >> 1) |
+                    (oldCarry << 7);
+
+                this.setZN(r);
+                this.write(a, r);
+
+                cycles = 7;
+                break;
+            }
+
+
+            /* =================================================
+               BIT
+            ================================================= */
+
+            case 0x24: {
+                const v =
+                    this.read(
+                        this.addrZeroPage()
+                    );
+
+                this.setFlag(
+                    0x40,
+                    (v & 0x40) !== 0
+                );
+
+                this.setFlag(
+                    0x80,
+                    (v & 0x80) !== 0
+                );
+
+                this.setFlag(
+                    0x02,
+                    (this.A & v) === 0
+                );
+
+                cycles = 3;
+                break;
+            }
+
+            case 0x2C: {
+                const v =
+                    this.read(
+                        this.addrAbsolute()
+                    );
+
+                this.setFlag(
+                    0x40,
+                    (v & 0x40) !== 0
+                );
+
+                this.setFlag(
+                    0x80,
+                    (v & 0x80) !== 0
+                );
+
+                this.setFlag(
+                    0x02,
+                    (this.A & v) === 0
+                );
+
+                cycles = 4;
+                break;
+            }
+
+
+            /* =================================================
+               JMP
+            ================================================= */
+
+            case 0x4C:
+
+                this.PC =
+                    this.addrAbsolute() &
+                    0x1FFF;
+
+                cycles = 3;
+                break;
+
+            case 0x6C: {
+
+                const pointer =
+                    this.fetchWord();
+
+                this.PC =
+                    this.readIndirectBug(
+                        pointer
+                    ) & 0x1FFF;
+
+                cycles = 5;
+                break;
+            }
+
+
+            /* =================================================
+               JSR
+            ================================================= */
+
+            case 0x20: {
+
+                const target =
+                    this.fetchWord();
+
+                const returnAddress =
+                    (this.PC - 1) &
+                    0x1FFF;
+
+                this.push(
+                    (returnAddress >> 8) &
+                    0xFF
+                );
+
+                this.push(
+                    returnAddress & 0xFF
+                );
+
+                this.PC =
+                    target & 0x1FFF;
+
+                cycles = 6;
+                break;
+            }
+
+
+            /* =================================================
+               RTS
+            ================================================= */
+
+            case 0x60: {
+
+                const lo = this.pop();
+                const hi = this.pop();
+
+                this.PC =
+                    ((hi << 8) | lo) &
+                    0x1FFF;
+
+                this.PC =
+                    (this.PC + 1) &
+                    0x1FFF;
+
+                cycles = 6;
+                break;
+            }
+
+
+            /* =================================================
+               RTI
+            ================================================= */
+
+            case 0x40: {
+
+                this.P =
+                    this.pop() & 0xEF;
+
+                const lo = this.pop();
+                const hi = this.pop();
+
+                this.PC =
+                    ((hi << 8) | lo) &
+                    0x1FFF;
+
+                cycles = 6;
+                break;
+            }
+
+
+            /* =================================================
+               STACK
+            ================================================= */
+
+            case 0x48:
+                this.push(this.A);
+                cycles = 3;
+                break;
+
+            case 0x68:
+                this.A =
+                    this.setZN(
+                        this.pop()
+                    );
+                cycles = 4;
+                break;
+
+            case 0x08:
+                this.push(
+                    this.P | 0x10
+                );
+                cycles = 3;
+                break;
+
+            case 0x28:
+                this.P =
+                    (this.pop() & 0xEF) |
+                    0x20;
+                cycles = 4;
+                break;
+
+
+            /* =================================================
+               TRANSFERS
+            ================================================= */
+
+            case 0xAA:
+                this.X =
+                    this.setZN(this.A);
+                cycles = 2;
+                break;
+
+            case 0x8A:
+                this.A =
+                    this.setZN(this.X);
+                cycles = 2;
+                break;
+
+            case 0xA8:
+                this.Y =
+                    this.setZN(this.A);
+                cycles = 2;
+                break;
+
+            case 0x98:
+                this.A =
+                    this.setZN(this.Y);
+                cycles = 2;
+                break;
+
+            case 0xBA:
+                this.X =
+                    this.setZN(this.SP);
+                cycles = 2;
+                break;
+
+            case 0x9A:
+                this.SP = this.X;
+                cycles = 2;
+                break;
+
+
+            /* =================================================
+               INX / DEX / INY / DEY
+            ================================================= */
+
+            case 0xE8:
+                this.X =
+                    this.setZN(
+                        (this.X + 1) &
+                        0xFF
+                    );
+                cycles = 2;
+                break;
+
+            case 0xCA:
+                this.X =
+                    this.setZN(
+                        (this.X - 1) &
+                        0xFF
+                    );
+                cycles = 2;
+                break;
+
+            case 0xC8:
+                this.Y =
+                    this.setZN(
+                        (this.Y + 1) &
+                        0xFF
+                    );
+                cycles = 2;
+                break;
+
+            case 0x88:
+                this.Y =
+                    this.setZN(
+                        (this.Y - 1) &
+                        0xFF
+                    );
+                cycles = 2;
+                break;
+
+
+            /* =================================================
+               FLAGS
+            ================================================= */
+
+            case 0x38:
+                this.setFlag(0x01, true);
+                cycles = 2;
+                break;
+
+            case 0x58:
+                this.setFlag(0x04, false);
+                cycles = 2;
+                break;
+
+            case 0x78:
+                this.setFlag(0x04, true);
+                cycles = 2;
+                break;
+
+            case 0xB8:
+                this.setFlag(0x40, false);
+                cycles = 2;
+                break;
+
+            case 0xD8:
+                this.setFlag(0x08, false);
+                cycles = 2;
+                break;
+
+            case 0xF8:
+                this.setFlag(0x08, true);
+                cycles = 2;
+                break;
+
+
+            /* =================================================
+               BRANCHES
+            ================================================= */
+
+            case 0x30:
+                cycles =
+                    this.branch(
+                        this.getFlag(0x80)
+                    );
+                break;
+
+            case 0x50:
+                cycles =
+                    this.branch(
+                        !this.getFlag(0x40)
+                    );
+                break;
+
+            case 0x70:
+                cycles =
+                    this.branch(
+                        this.getFlag(0x40)
+                    );
+                break;
+
+            case 0x90:
+                cycles =
+                    this.branch(
+                        !this.getFlag(0x01)
+                    );
+                break;
+
+            case 0xB0:
+                cycles =
+                    this.branch(
+                        this.getFlag(0x01)
+                    );
+                break;
+
+            case 0xD0:
+                cycles =
+                    this.branch(
+                        !this.getFlag(0x02)
+                    );
+                break;
+
+            case 0xF0:
+                cycles =
+                    this.branch(
+                        this.getFlag(0x02)
+                    );
+                break;
+
+
+            /* =================================================
+               NOP
+            ================================================= */
+
+            case 0xEA:
+                cycles = 2;
+                break;
+
+
+            /* =================================================
+               Remaining official NOP-like opcodes are treated
+               conservatively.
+
+               Illegal opcodes are NOT silently implemented yet.
+               We stop them visibly instead of pretending that
+               their behavior is correct.
+            ================================================= */
+
+            default:
+
+                this.halted = true;
+
+                console.warn(
+                    "Unsupported opcode $" +
+                    opcode.toString(16).padStart(2, "0") +
+                    " at $" +
+                    ((this.PC - 1) & 0x1FFF)
+                        .toString(16)
+                        .padStart(4, "0")
+                );
+
+                cycles = 2;
+
+                break;
+        }
+
+        this.cycles = cycles;
+
+        this.totalCycles += cycles;
+
+        this.bus.tick(cycles);
+
+        return cycles;
+    }
+}
+
+
+/* =========================================================
+   EMULATOR
+========================================================= */
+
+class Atari2600 {
+
+    constructor() {
+
+        this.bus = new AtariBus();
+
+        this.cpu =
+            new CPU6507(this.bus);
+
+        this.running = false;
+
+        this.romName = "";
+
+        this.lastFrameTime = 0;
+
+        this.statusElement =
+            document.getElementById("status");
+
+        this.cpuInfoElement =
+            document.getElementById("cpuInfo");
+    }
+
+    loadROM(data, name) {
+
+        try {
+
+            this.bus.cartridge.load(data);
+
+            this.bus.reset();
+
+            this.cpu.reset();
+
+            this.romName =
+                name || "Unknown ROM";
+
+            this.statusElement.innerHTML =
+                '<span class="ok">' +
+                "ROM loaded: " +
+                this.romName +
+                " (" +
+                this.bus.cartridge.size +
+                " bytes)" +
+                "</span>";
+
+            this.updateCPUInfo();
+
+            return true;
+
+        } catch (error) {
+
+            console.error(error);
+
+            this.statusElement.innerHTML =
+                '<span class="warn">' +
+                error.message +
+                "</span>";
+
+            return false;
+        }
+    }
+
+    reset() {
+
+        if (!this.bus.cartridge.rom) {
+            return;
+        }
+
+        this.bus.reset();
+
+        this.cpu.reset();
+
+        this.statusElement.textContent =
+            "CPU reset. PC = $" +
+            this.cpu.PC
+                .toString(16)
+                .padStart(4, "0")
+                .toUpperCase();
+
+        this.updateCPUInfo();
+    }
+
+    updateCPUInfo() {
+
+        const cpu = this.cpu;
+
+        this.cpuInfoElement.textContent =
+            "6507  " +
+            "PC=$" +
+            cpu.PC
+                .toString(16)
+                .padStart(4, "0")
+                .toUpperCase() +
+
+            "  A=$" +
+            cpu.A
+                .toString(16)
+                .padStart(2, "0")
+                .toUpperCase() +
+
+            "  X=$" +
+            cpu.X
+                .toString(16)
+                .padStart(2, "0")
+                .toUpperCase() +
+
+            "  Y=$" +
+            cpu.Y
+                .toString(16)
+                .padStart(2, "0")
+                .toUpperCase() +
+
+            "  SP=$" +
+            cpu.SP
+                .toString(16)
+                .padStart(2, "0")
+                .toUpperCase() +
+
+            "  P=$" +
+            cpu.P
+                .toString(16)
+                .padStart(2, "0")
+                .toUpperCase() +
+
+            "  CYCLES=" +
+            cpu.totalCycles;
+    }
+
+    runFrame() {
+
+        if (!this.bus.cartridge.rom) {
+            return;
+        }
+
+        /*
+         * One NTSC scanline = 76 CPU cycles.
+         *
+         * This first stage executes one complete scanline's
+         * worth of CPU cycles.
+         *
+         * The real frame scheduler will be connected after
+         * the TIA renderer is implemented.
+         */
+        let target =
+            cpuCyclesPerScanline();
+
+        while (target > 0 &&
+               !this.cpu.halted) {
+
+            const used =
+                this.cpu.step();
+
+            target -= used;
+        }
+
+        this.updateCPUInfo();
+    }
+}
+
+
+/* =========================================================
+   CONSTANTS
+========================================================= */
+
+function cpuCyclesPerScanline() {
+
+    /*
+     * 228 TIA color clocks / 3
+     * = 76 CPU cycles.
+     */
+    return 76;
+}
+
+
+/* =========================================================
+   GLOBAL EMULATOR
+========================================================= */
+
+const emulator =
+    new Atari2600();
+
+
+/* =========================================================
+   ROM LIST
+========================================================= */
+
+const romSelect =
+    document.getElementById("romSelect");
+
+const loadSelectedButton =
+    document.getElementById("loadSelected");
+
+const fileInput =
+    document.getElementById("fileInput");
+
+const resetButton =
+    document.getElementById("resetButton");
+
+
+async function loadROMIndex() {
+
+    try {
+
+        const response =
+            await fetch(
+                "roms/index.json",
+                {
+                    cache: "no-store"
+                }
+            );
+
+        if (!response.ok) {
+            throw new Error(
+                "Could not load roms/index.json"
+            );
+        }
+
+        const list =
+            await response.json();
+
+        romSelect.innerHTML =
+            '<option value="">Select Atari 2600 ROM</option>';
+
+        for (const item of list) {
+
+            const path =
+                typeof item === "string"
+                    ? item
+                    : item.path;
+
+            if (!path) {
+                continue;
+            }
+
+            const option =
+                document.createElement("option");
+
+            option.value = path;
+
+            option.textContent =
+                path
+                    .split("/")
+                    .pop()
+                    .replace(/\.[^.]+$/, "");
+
+            romSelect.appendChild(option);
+        }
+
+        document.getElementById("status")
+            .textContent =
+            "ROM list loaded. Select an Atari 2600 cartridge.";
+
+    } catch (error) {
+
+        console.warn(error);
+
+        document.getElementById("status")
+            .textContent =
+            "ROM list could not be loaded. " +
+            "You can still use the file selector on PC.";
+    }
+}
+
+
+async function loadSelectedROM() {
+
+    const path =
+        romSelect.value;
+
+    if (!path) {
+        return;
+    }
+
+    try {
+
+        const response =
+            await fetch(
+                path,
+                {
+                    cache: "no-store"
+                }
+            );
+
+        if (!response.ok) {
+            throw new Error(
+                "Could not load ROM: " +
+                path
+            );
+        }
+
+        const buffer =
+            await response.arrayBuffer();
+
+        const name =
+            path
+                .split("/")
+                .pop();
+
+        emulator.loadROM(
+            new Uint8Array(buffer),
+            name
+        );
+
+    } catch (error) {
+
+        console.error(error);
+
+        document.getElementById("status")
+            .innerHTML =
+            '<span class="warn">' +
+            error.message +
+            "</span>";
+    }
+}
+
+
+fileInput.addEventListener(
+    "change",
+    async function() {
+
+        const file =
+            this.files &&
+            this.files[0];
+
+        if (!file) {
+            return;
+        }
+
+        try {
+
+            const buffer =
+                await file.arrayBuffer();
+
+            emulator.loadROM(
+                new Uint8Array(buffer),
+                file.name
+            );
+
+        } catch (error) {
+
+            console.error(error);
+
+            document.getElementById("status")
+                .innerHTML =
+                '<span class="warn">' +
+                error.message +
+                "</span>";
+        }
+    }
+);
+
+
+loadSelectedButton.addEventListener(
+    "click",
+    loadSelectedROM
+);
+
+
+resetButton.addEventListener(
+    "click",
+    function() {
+
+        emulator.reset();
+    }
+);
+
+
+/* =========================================================
+   KEYBOARD
+========================================================= */
+
+const keyMap = {
+
+    ArrowUp: "up",
+    ArrowDown: "down",
+    ArrowLeft: "left",
+    ArrowRight: "right",
+    " ": "fire"
+};
+
+
+document.addEventListener(
+    "keydown",
+    function(event) {
+
+        if (event.key === "r" ||
+            event.key === "R") {
+
+            emulator.reset();
+            return;
+        }
+
+        const control =
+            keyMap[event.key];
+
+        if (!control) {
+            return;
+        }
+
+        event.preventDefault();
+
+        emulator.bus.controller[control] =
+            true;
+    }
+);
+
+
+document.addEventListener(
+    "keyup",
+    function(event) {
+
+        const control =
+            keyMap[event.key];
+
+        if (!control) {
+            return;
+        }
+
+        event.preventDefault();
+
+        emulator.bus.controller[control] =
+            false;
+    }
+);
+
+
+/* =========================================================
+   ON-SCREEN CONTROLS
+========================================================= */
+
+document
+    .querySelectorAll(".control[data-control]")
+    .forEach(button => {
+
+        const control =
+            button.dataset.control;
+
+        function press(event) {
+
+            event.preventDefault();
+
+            emulator.bus.controller[control] =
+                true;
+        }
+
+        function release(event) {
+
+            event.preventDefault();
+
+            emulator.bus.controller[control] =
+                false;
+        }
+
+        button.addEventListener(
+            "pointerdown",
+            press
+        );
+
+        button.addEventListener(
+            "pointerup",
+            release
+        );
+
+        button.addEventListener(
+            "pointercancel",
+            release
+        );
+
+        button.addEventListener(
+            "pointerleave",
+            release
+        );
+
+        button.addEventListener(
+            "touchstart",
+            press,
+            {
+                passive: false
+            }
+        );
+
+        button.addEventListener(
+            "touchend",
+            release,
+            {
+                passive: false
+            }
+        );
+    });
+
+
+/* =========================================================
+   MAIN LOOP
+========================================================= */
+
+function frameLoop(timestamp) {
+
+    if (!emulator.lastFrameTime) {
+        emulator.lastFrameTime =
+            timestamp;
+    }
+
+    /*
+     * Keep this deliberately conservative
+     * until the real TIA frame scheduler exists.
+     */
+    if (emulator.bus.cartridge.rom &&
+        !emulator.cpu.halted) {
+
+        emulator.runFrame();
+    }
+
+    requestAnimationFrame(frameLoop);
+}
+
+
+/* =========================================================
+   START
+========================================================= */
+
+loadROMIndex();
+
+requestAnimationFrame(frameLoop);
+
+</script>
+
+</body>
+</html>
