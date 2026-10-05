@@ -765,2252 +765,1313 @@ class AtariBus {
 ========================================================= */
 
 class CPU6507 {
-
     constructor(bus) {
-
         this.bus = bus;
 
         this.A = 0;
         this.X = 0;
         this.Y = 0;
-
-        this.SP = 0xFF;
-
-        /*
-         * Processor status:
-         *
-         * NV-BDIZC
-         *
-         * B is not a physical storage bit on the 6502,
-         * but keeping it here simplifies the emulator.
-         */
-        this.P = 0x24;
-
-        this.PC = 0;
-
-        this.cycles = 0;
-
-        this.totalCycles = 0;
-
-        this.halted = false;
-    }
-
-    reset() {
-
-        this.A = 0;
-        this.X = 0;
-        this.Y = 0;
-
         this.SP = 0xFD;
-
+        this.PC = 0x0000;
         this.P = 0x24;
 
         this.halted = false;
+        this.waiting = false;
 
-        /*
-         * Atari 2600 reset vector:
-         *
-         * $FFFC/$FFFD
-         *
-         * Because the 6507 only exposes 13 address lines,
-         * this is mirrored into the cartridge area.
-         */
-        const lo = this.read(0x1FFC);
-        const hi = this.read(0x1FFD);
+        this.FLAG_C = 0x01;
+        this.FLAG_Z = 0x02;
+        this.FLAG_I = 0x04;
+        this.FLAG_D = 0x08;
+        this.FLAG_B = 0x10;
+        this.FLAG_U = 0x20;
+        this.FLAG_V = 0x40;
+        this.FLAG_N = 0x80;
 
-        this.PC = (hi << 8) | lo;
-
-        /*
-         * Keep execution within the 13-bit address space.
-         */
-        this.PC &= 0x1FFF;
-
-        this.cycles = 0;
-        this.totalCycles = 0;
+        this.opcodes = new Array(256).fill(null);
+        this.buildOpcodeTable();
     }
 
-    read(address) {
+    /* =========================================================
+       BASIC BUS ACCESS
+       ========================================================= */
 
-        return this.bus.read(address & 0x1FFF);
+    read(addr) {
+        return this.bus.read(addr & 0x1FFF) & 0xFF;
     }
 
-    write(address, value) {
-
-        this.bus.write(address & 0x1FFF, value);
+    write(addr, value) {
+        this.bus.write(addr & 0x1FFF, value & 0xFF);
     }
+
+    tick(cycles) {
+        if (this.bus && typeof this.bus.tick === "function") {
+            this.bus.tick(cycles);
+        }
+    }
+
+    /* =========================================================
+       FLAGS
+       ========================================================= */
+
+    getFlag(flag) {
+        return (this.P & flag) !== 0;
+    }
+
+    setFlag(flag, value) {
+        if (value) {
+            this.P |= flag;
+        } else {
+            this.P &= ~flag;
+        }
+
+        this.P |= this.FLAG_U;
+        this.P &= 0xFF;
+    }
+
+    setZN(value) {
+        value &= 0xFF;
+
+        this.setFlag(this.FLAG_Z, value === 0);
+        this.setFlag(this.FLAG_N, (value & 0x80) !== 0);
+    }
+
+    /* =========================================================
+       STACK
+       ========================================================= */
+
+    push(value) {
+        this.write(0x0100 | this.SP, value);
+        this.SP = (this.SP - 1) & 0xFF;
+    }
+
+    pop() {
+        this.SP = (this.SP + 1) & 0xFF;
+        return this.read(0x0100 | this.SP);
+    }
+
+    pushStatus(brk) {
+        let value = this.P | this.FLAG_U;
+
+        if (brk) {
+            value |= this.FLAG_B;
+        } else {
+            value &= ~this.FLAG_B;
+        }
+
+        this.push(value);
+    }
+
+    pullStatus() {
+        this.P = this.pop();
+        this.P |= this.FLAG_U;
+        this.P &= 0xFF;
+    }
+
+    /* =========================================================
+       FETCH
+       ========================================================= */
 
     fetchByte() {
-
         const value = this.read(this.PC);
-
         this.PC = (this.PC + 1) & 0x1FFF;
-
         return value;
     }
 
     fetchWord() {
-
         const lo = this.fetchByte();
         const hi = this.fetchByte();
 
         return lo | (hi << 8);
     }
 
-    push(value) {
+    /* =========================================================
+       ADDRESSING MODES
+       ========================================================= */
 
-        this.write(
-            0x0100 | this.SP,
-            value
-        );
-
-        this.SP = (this.SP - 1) & 0xFF;
-    }
-
-    pop() {
-
-        this.SP = (this.SP + 1) & 0xFF;
-
-        return this.read(
-            0x0100 | this.SP
-        );
-    }
-
-    setFlag(mask, state) {
-
-        if (state) {
-            this.P |= mask;
-        } else {
-            this.P &= ~mask;
-        }
-
-        this.P &= 0xFF;
-    }
-
-    getFlag(mask) {
-
-        return (this.P & mask) !== 0;
-    }
-
-    setZN(value) {
-
-        value &= 0xFF;
-
-        this.setFlag(0x02, value === 0);
-        this.setFlag(0x80, (value & 0x80) !== 0);
-
-        return value;
-    }
-
-    adc(value) {
-
-        value &= 0xFF;
-
-        const carry = this.getFlag(0x01) ? 1 : 0;
-
-        const a = this.A;
-
-        const result =
-            a +
-            value +
-            carry;
-
-        const binaryResult = result & 0xFF;
-
-        /*
-         * 6502 overflow:
-         *
-         * operands same sign,
-         * result different sign.
-         */
-        const overflow =
-            (~(a ^ value) &
-             (a ^ binaryResult) &
-             0x80) !== 0;
-
-        this.setFlag(0x01, result > 0xFF);
-        this.setFlag(0x40, overflow);
-
-        this.A = this.setZN(binaryResult);
-    }
-
-    sbc(value) {
-
-        value &= 0xFF;
-
-        const carry = this.getFlag(0x01) ? 1 : 0;
-
-        const a = this.A;
-
-        const result =
-            a -
-            value -
-            (1 - carry);
-
-        const binaryResult = result & 0xFF;
-
-        const overflow =
-            ((a ^ binaryResult) &
-             (a ^ value) &
-             0x80) !== 0;
-
-        this.setFlag(0x01, result >= 0);
-        this.setFlag(0x40, overflow);
-
-        this.A = this.setZN(binaryResult);
-    }
-
-    compare(registerValue, value) {
-
-        registerValue &= 0xFF;
-        value &= 0xFF;
-
-        const result =
-            (registerValue - value) & 0xFF;
-
-        this.setFlag(
-            0x01,
-            registerValue >= value
-        );
-
-        this.setZN(result);
+    addrImmediate() {
+        return this.PC;
     }
 
     addrZeroPage() {
-
         return this.fetchByte();
     }
 
     addrZeroPageX() {
-
-        return (
-            this.fetchByte() +
-            this.X
-        ) & 0xFF;
+        const base = this.fetchByte();
+        return (base + this.X) & 0xFF;
     }
 
     addrZeroPageY() {
-
-        return (
-            this.fetchByte() +
-            this.Y
-        ) & 0xFF;
+        const base = this.fetchByte();
+        return (base + this.Y) & 0xFF;
     }
 
     addrAbsolute() {
-
         return this.fetchWord();
     }
 
     addrAbsoluteX() {
-
         const base = this.fetchWord();
+        const addr = (base + this.X) & 0xFFFF;
 
-        return (
-            base +
-            this.X
-        ) & 0xFFFF;
+        return {
+            addr,
+            pageCrossed: (base & 0xFF00) !== (addr & 0xFF00)
+        };
     }
 
     addrAbsoluteY() {
-
         const base = this.fetchWord();
+        const addr = (base + this.Y) & 0xFFFF;
 
-        return (
-            base +
-            this.Y
-        ) & 0xFFFF;
+        return {
+            addr,
+            pageCrossed: (base & 0xFF00) !== (addr & 0xFF00)
+        };
     }
 
     addrIndirectX() {
+        const zp = (this.fetchByte() + this.X) & 0xFF;
 
-        const zp =
-            (this.fetchByte() + this.X) &
-            0xFF;
-
-        const lo =
-            this.read(zp);
-
-        const hi =
-            this.read((zp + 1) & 0xFF);
+        const lo = this.read(zp);
+        const hi = this.read((zp + 1) & 0xFF);
 
         return lo | (hi << 8);
     }
 
     addrIndirectY() {
+        const zp = this.fetchByte();
 
-        const zp =
-            this.fetchByte();
+        const lo = this.read(zp);
+        const hi = this.read((zp + 1) & 0xFF);
 
-        const lo =
-            this.read(zp);
+        const base = lo | (hi << 8);
+        const addr = (base + this.Y) & 0xFFFF;
 
-        const hi =
-            this.read((zp + 1) & 0xFF);
-
-        const base =
-            lo | (hi << 8);
-
-        return (
-            base +
-            this.Y
-        ) & 0xFFFF;
+        return {
+            addr,
+            pageCrossed: (base & 0xFF00) !== (addr & 0xFF00)
+        };
     }
 
-    readIndirectBug(address) {
+    /* =========================================================
+       MEMORY OPERANDS
+       ========================================================= */
 
+    readOperand(mode) {
+        switch (mode) {
+            case "imm":
+                return {
+                    value: this.read(this.addrImmediate()),
+                    pageCrossed: false
+                };
+
+            case "zp":
+                return {
+                    value: this.read(this.addrZeroPage()),
+                    pageCrossed: false
+                };
+
+            case "zpx":
+                return {
+                    value: this.read(this.addrZeroPageX()),
+                    pageCrossed: false
+                };
+
+            case "zpy":
+                return {
+                    value: this.read(this.addrZeroPageY()),
+                    pageCrossed: false
+                };
+
+            case "abs":
+                return {
+                    value: this.read(this.addrAbsolute()),
+                    pageCrossed: false
+                };
+
+            case "absx": {
+                const r = this.addrAbsoluteX();
+
+                return {
+                    value: this.read(r.addr),
+                    pageCrossed: r.pageCrossed
+                };
+            }
+
+            case "absy": {
+                const r = this.addrAbsoluteY();
+
+                return {
+                    value: this.read(r.addr),
+                    pageCrossed: r.pageCrossed
+                };
+            }
+
+            case "izx":
+                return {
+                    value: this.read(this.addrIndirectX()),
+                    pageCrossed: false
+                };
+
+            case "izy": {
+                const r = this.addrIndirectY();
+
+                return {
+                    value: this.read(r.addr),
+                    pageCrossed: r.pageCrossed
+                };
+            }
+
+            default:
+                throw new Error("Unsupported operand mode: " + mode);
+        }
+    }
+
+    getAddress(mode) {
+        switch (mode) {
+            case "zp":
+                return this.addrZeroPage();
+
+            case "zpx":
+                return this.addrZeroPageX();
+
+            case "zpy":
+                return this.addrZeroPageY();
+
+            case "abs":
+                return this.addrAbsolute();
+
+            case "absx":
+                return this.addrAbsoluteX().addr;
+
+            case "absy":
+                return this.addrAbsoluteY().addr;
+
+            case "izx":
+                return this.addrIndirectX();
+
+            case "izy":
+                return this.addrIndirectY().addr;
+
+            default:
+                throw new Error("Unsupported address mode: " + mode);
+        }
+    }
+
+    /* =========================================================
+       ALU
+       ========================================================= */
+
+    adc(value) {
+        value &= 0xFF;
+
+        const a = this.A;
+        const carry = this.getFlag(this.FLAG_C) ? 1 : 0;
+
+        const binarySum = a + value + carry;
+        const binaryResult = binarySum & 0xFF;
+
+        const overflow =
+            (~(a ^ value) & (a ^ binaryResult) & 0x80) !== 0;
+
+        if (this.getFlag(this.FLAG_D)) {
+            let decimal = binarySum;
+
+            if (((a & 0x0F) + (value & 0x0F) + carry) > 9) {
+                decimal += 0x06;
+            }
+
+            if (decimal > 0x99) {
+                decimal += 0x60;
+            }
+
+            this.setFlag(this.FLAG_C, decimal > 0xFF);
+            this.A = decimal & 0xFF;
+
+            // NMOS 6502: N/Z/V are based on the binary result.
+            this.setFlag(this.FLAG_Z, binaryResult === 0);
+            this.setFlag(this.FLAG_N, (binaryResult & 0x80) !== 0);
+            this.setFlag(this.FLAG_V, overflow);
+
+            return;
+        }
+
+        this.setFlag(this.FLAG_C, binarySum > 0xFF);
+        this.setFlag(this.FLAG_V, overflow);
+
+        this.A = binaryResult;
+        this.setZN(this.A);
+    }
+
+    sbc(value) {
+        value &= 0xFF;
+
+        const a = this.A;
+        const carry = this.getFlag(this.FLAG_C) ? 1 : 0;
+
+        const diff = a - value - (1 - carry);
+        const binaryResult = diff & 0xFF;
+
+        const overflow =
+            ((a ^ binaryResult) & (a ^ value) & 0x80) !== 0;
+
+        if (this.getFlag(this.FLAG_D)) {
+            let lo = (a & 0x0F) - (value & 0x0F) - (1 - carry);
+            let hi = (a >> 4) - (value >> 4);
+
+            if (lo < 0) {
+                lo -= 6;
+                hi--;
+            }
+
+            if (hi < 0) {
+                hi -= 6;
+            }
+
+            this.setFlag(this.FLAG_C, diff >= 0);
+
+            this.A = ((hi << 4) | (lo & 0x0F)) & 0xFF;
+
+            // NMOS 6502 decimal SBC also leaves N/Z/V
+            // according to the binary subtraction result.
+            this.setFlag(this.FLAG_Z, binaryResult === 0);
+            this.setFlag(this.FLAG_N, (binaryResult & 0x80) !== 0);
+            this.setFlag(this.FLAG_V, overflow);
+
+            return;
+        }
+
+        this.setFlag(this.FLAG_C, diff >= 0);
+        this.setFlag(this.FLAG_V, overflow);
+
+        this.A = binaryResult;
+        this.setZN(this.A);
+    }
+
+    compare(reg, value) {
+        const result = (reg - value) & 0xFF;
+
+        this.setFlag(this.FLAG_C, reg >= value);
+        this.setZN(result);
+    }
+
+    /* =========================================================
+       READ INSTRUCTIONS
+       ========================================================= */
+
+    executeRead(op, value) {
+        value &= 0xFF;
+
+        switch (op) {
+            case "LDA":
+                this.A = value;
+                this.setZN(this.A);
+                break;
+
+            case "LDX":
+                this.X = value;
+                this.setZN(this.X);
+                break;
+
+            case "LDY":
+                this.Y = value;
+                this.setZN(this.Y);
+                break;
+
+            case "ORA":
+                this.A = (this.A | value) & 0xFF;
+                this.setZN(this.A);
+                break;
+
+            case "AND":
+                this.A = (this.A & value) & 0xFF;
+                this.setZN(this.A);
+                break;
+
+            case "EOR":
+                this.A = (this.A ^ value) & 0xFF;
+                this.setZN(this.A);
+                break;
+
+            case "ADC":
+                this.adc(value);
+                break;
+
+            case "SBC":
+                this.sbc(value);
+                break;
+
+            case "CMP":
+                this.compare(this.A, value);
+                break;
+
+            case "CPX":
+                this.compare(this.X, value);
+                break;
+
+            case "CPY":
+                this.compare(this.Y, value);
+                break;
+
+            case "BIT":
+                this.setFlag(this.FLAG_Z, (this.A & value) === 0);
+                this.setFlag(this.FLAG_V, (value & 0x40) !== 0);
+                this.setFlag(this.FLAG_N, (value & 0x80) !== 0);
+                break;
+
+            default:
+                throw new Error("Unsupported read operation: " + op);
+        }
+    }
+
+    /* =========================================================
+       SHIFT / ROTATE
+       ========================================================= */
+
+    shiftValue(op, value) {
+        value &= 0xFF;
+
+        let result = value;
+
+        switch (op) {
+            case "ASL":
+                this.setFlag(this.FLAG_C, (value & 0x80) !== 0);
+                result = (value << 1) & 0xFF;
+                break;
+
+            case "LSR":
+                this.setFlag(this.FLAG_C, (value & 0x01) !== 0);
+                result = (value >> 1) & 0xFF;
+                break;
+
+            case "ROL": {
+                const oldCarry = this.getFlag(this.FLAG_C) ? 1 : 0;
+
+                this.setFlag(this.FLAG_C, (value & 0x80) !== 0);
+
+                result = ((value << 1) | oldCarry) & 0xFF;
+                break;
+            }
+
+            case "ROR": {
+                const oldCarry = this.getFlag(this.FLAG_C) ? 1 : 0;
+
+                this.setFlag(this.FLAG_C, (value & 0x01) !== 0);
+
+                result = ((value >> 1) | (oldCarry << 7)) & 0xFF;
+                break;
+            }
+
+            default:
+                throw new Error("Unsupported shift operation: " + op);
+        }
+
+        this.setZN(result);
+
+        return result;
+    }
+
+    /* =========================================================
+       OPCODE TABLE
+       ========================================================= */
+
+    define(opcode, operation, mode, cycles, pagePenalty = false) {
+        this.opcodes[opcode & 0xFF] = {
+            operation,
+            mode,
+            cycles,
+            pagePenalty
+        };
+    }
+
+    defineMany(operation, entries) {
+        for (const entry of entries) {
+            this.define(
+                entry[0],
+                operation,
+                entry[1],
+                entry[2],
+                entry[3] || false
+            );
+        }
+    }
+
+    buildOpcodeTable() {
         /*
-         * Original 6502 JMP indirect page-wrap behavior.
+         * Official NMOS 6502 instruction set.
          *
-         * JMP ($12FF) reads the high byte from $1200,
-         * not $1300.
+         * The Atari 2600's 6507 is a 6502-family CPU with
+         * a 13-bit address bus. The opcode/addressing behavior
+         * here therefore follows the official 6502 instructions.
          */
-        const lo =
-            this.read(address);
 
-        const hiAddress =
-            (address & 0xFF00) |
-            ((address + 1) & 0x00FF);
+        /* ADC */
+        this.defineMany("ADC", [
+            [0x69, "imm", 2],
+            [0x65, "zp", 3],
+            [0x75, "zpx", 4],
+            [0x6D, "abs", 4],
+            [0x7D, "absx", 4, true],
+            [0x79, "absy", 4, true],
+            [0x61, "izx", 6],
+            [0x71, "izy", 5, true]
+        ]);
 
-        const hi =
-            this.read(hiAddress);
+        /* AND */
+        this.defineMany("AND", [
+            [0x29, "imm", 2],
+            [0x25, "zp", 3],
+            [0x35, "zpx", 4],
+            [0x2D, "abs", 4],
+            [0x3D, "absx", 4, true],
+            [0x39, "absy", 4, true],
+            [0x21, "izx", 6],
+            [0x31, "izy", 5, true]
+        ]);
 
-        return lo | (hi << 8);
+        /* ASL */
+        this.defineMany("ASL", [
+            [0x0A, "acc", 2],
+            [0x06, "zp", 5],
+            [0x16, "zpx", 6],
+            [0x0E, "abs", 6],
+            [0x1E, "absx", 7]
+        ]);
+
+        /* Branches */
+        this.define(0x90, "BCC", "rel", 2);
+        this.define(0xB0, "BCS", "rel", 2);
+        this.define(0xF0, "BEQ", "rel", 2);
+        this.define(0x30, "BMI", "rel", 2);
+        this.define(0xD0, "BNE", "rel", 2);
+        this.define(0x10, "BPL", "rel", 2);
+        this.define(0x50, "BVC", "rel", 2);
+        this.define(0x70, "BVS", "rel", 2);
+
+        /* BIT */
+        this.define(0x24, "BIT", "zp", 3);
+        this.define(0x2C, "BIT", "abs", 4);
+
+        /* BRK */
+        this.define(0x00, "BRK", "imp", 7);
+
+        /* Flag instructions */
+        this.define(0x18, "CLC", "imp", 2);
+        this.define(0xD8, "CLD", "imp", 2);
+        this.define(0x58, "CLI", "imp", 2);
+        this.define(0xB8, "CLV", "imp", 2);
+
+        /* CMP */
+        this.defineMany("CMP", [
+            [0xC9, "imm", 2],
+            [0xC5, "zp", 3],
+            [0xD5, "zpx", 4],
+            [0xCD, "abs", 4],
+            [0xDD, "absx", 4, true],
+            [0xD9, "absy", 4, true],
+            [0xC1, "izx", 6],
+            [0xD1, "izy", 5, true]
+        ]);
+
+        /* CPX */
+        this.defineMany("CPX", [
+            [0xE0, "imm", 2],
+            [0xE4, "zp", 3],
+            [0xEC, "abs", 4]
+        ]);
+
+        /* CPY */
+        this.defineMany("CPY", [
+            [0xC0, "imm", 2],
+            [0xC4, "zp", 3],
+            [0xCC, "abs", 4]
+        ]);
+
+        /* DEC */
+        this.defineMany("DEC", [
+            [0xC6, "zp", 5],
+            [0xD6, "zpx", 6],
+            [0xCE, "abs", 6],
+            [0xDE, "absx", 7]
+        ]);
+
+        /* DEX / DEY */
+        this.define(0xCA, "DEX", "imp", 2);
+        this.define(0x88, "DEY", "imp", 2);
+
+        /* EOR */
+        this.defineMany("EOR", [
+            [0x49, "imm", 2],
+            [0x45, "zp", 3],
+            [0x55, "zpx", 4],
+            [0x4D, "abs", 4],
+            [0x5D, "absx", 4, true],
+            [0x59, "absy", 4, true],
+            [0x41, "izx", 6],
+            [0x51, "izy", 5, true]
+        ]);
+
+        /* INC */
+        this.defineMany("INC", [
+            [0xE6, "zp", 5],
+            [0xF6, "zpx", 6],
+            [0xEE, "abs", 6],
+            [0xFE, "absx", 7]
+        ]);
+
+        /* INX / INY */
+        this.define(0xE8, "INX", "imp", 2);
+        this.define(0xC8, "INY", "imp", 2);
+
+        /* JMP */
+        this.define(0x4C, "JMP", "abs", 3);
+        this.define(0x6C, "JMP", "ind", 5);
+
+        /* JSR */
+        this.define(0x20, "JSR", "abs", 6);
+
+        /* LDA */
+        this.defineMany("LDA", [
+            [0xA9, "imm", 2],
+            [0xA5, "zp", 3],
+            [0xB5, "zpx", 4],
+            [0xAD, "abs", 4],
+            [0xBD, "absx", 4, true],
+            [0xB9, "absy", 4, true],
+            [0xA1, "izx", 6],
+            [0xB1, "izy", 5, true]
+        ]);
+
+        /* LDX */
+        this.defineMany("LDX", [
+            [0xA2, "imm", 2],
+            [0xA6, "zp", 3],
+            [0xB6, "zpy", 4],
+            [0xAE, "abs", 4],
+            [0xBE, "absy", 4, true]
+        ]);
+
+        /* LDY */
+        this.defineMany("LDY", [
+            [0xA0, "imm", 2],
+            [0xA4, "zp", 3],
+            [0xB4, "zpx", 4],
+            [0xAC, "abs", 4],
+            [0xBC, "absx", 4, true]
+        ]);
+
+        /* LSR */
+        this.defineMany("LSR", [
+            [0x4A, "acc", 2],
+            [0x46, "zp", 5],
+            [0x56, "zpx", 6],
+            [0x4E, "abs", 6],
+            [0x5E, "absx", 7]
+        ]);
+
+        /* NOP */
+        this.define(0xEA, "NOP", "imp", 2);
+
+        /* ORA */
+        this.defineMany("ORA", [
+            [0x09, "imm", 2],
+            [0x05, "zp", 3],
+            [0x15, "zpx", 4],
+            [0x0D, "abs", 4],
+            [0x1D, "absx", 4, true],
+            [0x19, "absy", 4, true],
+            [0x01, "izx", 6],
+            [0x11, "izy", 5, true]
+        ]);
+
+        /* Stack */
+        this.define(0x48, "PHA", "imp", 3);
+        this.define(0x08, "PHP", "imp", 3);
+        this.define(0x68, "PLA", "imp", 4);
+        this.define(0x28, "PLP", "imp", 4);
+
+        /* ROL */
+        this.defineMany("ROL", [
+            [0x2A, "acc", 2],
+            [0x26, "zp", 5],
+            [0x36, "zpx", 6],
+            [0x2E, "abs", 6],
+            [0x3E, "absx", 7]
+        ]);
+
+        /* ROR */
+        this.defineMany("ROR", [
+            [0x6A, "acc", 2],
+            [0x66, "zp", 5],
+            [0x76, "zpx", 6],
+            [0x6E, "abs", 6],
+            [0x7E, "absx", 7]
+        ]);
+
+        /* RTI / RTS */
+        this.define(0x40, "RTI", "imp", 6);
+        this.define(0x60, "RTS", "imp", 6);
+
+        /* SBC */
+        this.defineMany("SBC", [
+            [0xE9, "imm", 2],
+            [0xE5, "zp", 3],
+            [0xF5, "zpx", 4],
+            [0xED, "abs", 4],
+            [0xFD, "absx", 4, true],
+            [0xF9, "absy", 4, true],
+            [0xE1, "izx", 6],
+            [0xF1, "izy", 5, true]
+        ]);
+
+        /* SEC / SED / SEI */
+        this.define(0x38, "SEC", "imp", 2);
+        this.define(0xF8, "SED", "imp", 2);
+        this.define(0x78, "SEI", "imp", 2);
+
+        /* STA */
+        this.defineMany("STA", [
+            [0x85, "zp", 3],
+            [0x95, "zpx", 4],
+            [0x8D, "abs", 4],
+            [0x9D, "absx", 5],
+            [0x99, "absy", 5],
+            [0x81, "izx", 6],
+            [0x91, "izy", 6]
+        ]);
+
+        /* STX */
+        this.defineMany("STX", [
+            [0x86, "zp", 3],
+            [0x96, "zpy", 4],
+            [0x8E, "abs", 4]
+        ]);
+
+        /* STY */
+        this.defineMany("STY", [
+            [0x84, "zp", 3],
+            [0x94, "zpx", 4],
+            [0x8C, "abs", 4]
+        ]);
+
+        /* Transfers */
+        this.define(0xAA, "TAX", "imp", 2);
+        this.define(0xA8, "TAY", "imp", 2);
+        this.define(0xBA, "TSX", "imp", 2);
+        this.define(0x8A, "TXA", "imp", 2);
+        this.define(0x9A, "TXS", "imp", 2);
+        this.define(0x98, "TYA", "imp", 2);
     }
+
+    /* =========================================================
+       BRANCH
+       ========================================================= */
 
     branch(condition) {
-
         const offset = this.fetchByte();
 
         if (!condition) {
-            return 2;
+            this.tick(2);
+            return;
         }
 
         const oldPC = this.PC;
 
-        let signedOffset = offset;
+        const signedOffset =
+            (offset & 0x80)
+                ? offset - 0x100
+                : offset;
 
-        if (signedOffset & 0x80) {
-            signedOffset -= 0x100;
-        }
-
-        this.PC =
-            (this.PC + signedOffset) &
-            0x1FFF;
+        this.PC = (this.PC + signedOffset) & 0x1FFF;
 
         let cycles = 3;
 
-        if ((oldPC & 0xFF00) !==
-            (this.PC & 0xFF00)) {
-
+        if ((oldPC & 0x1F00) !== (this.PC & 0x1F00)) {
             cycles++;
         }
 
-        return cycles;
+        this.tick(cycles);
     }
 
-    step() {
+    /* =========================================================
+       JMP INDIRECT
+       ========================================================= */
 
-        if (this.halted) {
-            return 1;
+    readIndirect6502Bug(pointer) {
+        const lo = this.read(pointer);
+
+        /*
+         * Original NMOS 6502 behavior:
+         * JMP ($xxFF) reads the high byte from $xx00
+         * instead of $xx+1xx.
+         */
+        const hiAddress =
+            (pointer & 0x00FF) === 0x00FF
+                ? (pointer & 0xFF00)
+                : ((pointer + 1) & 0xFFFF);
+
+        const hi = this.read(hiAddress);
+
+        return lo | (hi << 8);
+    }
+
+    /* =========================================================
+       EXECUTION
+       ========================================================= */
+
+    execute(instruction) {
+        const op = instruction.operation;
+        const mode = instruction.mode;
+
+        /* -----------------------------------------------------
+           Read-type instructions
+           ----------------------------------------------------- */
+
+        if (
+            op === "LDA" ||
+            op === "LDX" ||
+            op === "LDY" ||
+            op === "ORA" ||
+            op === "AND" ||
+            op === "EOR" ||
+            op === "ADC" ||
+            op === "SBC" ||
+            op === "CMP" ||
+            op === "CPX" ||
+            op === "CPY" ||
+            op === "BIT"
+        ) {
+            const operand = this.readOperand(mode);
+
+            this.executeRead(op, operand.value);
+
+            return instruction.cycles +
+                (instruction.pagePenalty && operand.pageCrossed ? 1 : 0);
         }
 
-        const opcode =
-            this.fetchByte();
+        /* -----------------------------------------------------
+           ASL / LSR / ROL / ROR
+           ----------------------------------------------------- */
 
-        let cycles = 2;
-
-        switch (opcode) {
-
-            /* =================================================
-               BRK / ORA / ASL
-            ================================================= */
-
-            case 0x00: {
-                /*
-                 * BRK
-                 */
-                this.PC =
-                    (this.PC + 1) &
-                    0x1FFF;
-
-                this.push(
-                    (this.PC >> 8) & 0xFF
-                );
-
-                this.push(
-                    this.PC & 0xFF
-                );
-
-                this.push(
-                    this.P | 0x10
-                );
-
-                this.setFlag(0x04, true);
-
-                const lo =
-                    this.read(0x1FFE);
-
-                const hi =
-                    this.read(0x1FFF);
-
-                this.PC =
-                    ((hi << 8) | lo) &
-                    0x1FFF;
-
-                cycles = 7;
-                break;
+        if (
+            op === "ASL" ||
+            op === "LSR" ||
+            op === "ROL" ||
+            op === "ROR"
+        ) {
+            if (mode === "acc") {
+                this.A = this.shiftValue(op, this.A);
+                return instruction.cycles;
             }
 
-            case 0x01: {
-                const a = this.addrIndirectX();
-                this.A = this.setZN(
-                    this.A |
-                    this.read(a)
-                );
-                cycles = 6;
-                break;
-            }
-
-            case 0x05: {
-                const a = this.addrZeroPage();
-                this.A = this.setZN(
-                    this.A |
-                    this.read(a)
-                );
-                cycles = 3;
-                break;
-            }
-
-            case 0x06: {
-                const a = this.addrZeroPage();
-                const v = this.read(a);
-
-                this.setFlag(
-                    0x01,
-                    (v & 0x80) !== 0
-                );
-
-                const r =
-                    (v << 1) & 0xFF;
-
-                this.setZN(r);
-                this.write(a, r);
-
-                cycles = 5;
-                break;
-            }
-
-            case 0x09:
-                this.A = this.setZN(
-                    this.A |
-                    this.fetchByte()
-                );
-                cycles = 2;
-                break;
-
-            case 0x0A: {
-                const v = this.A;
-
-                this.setFlag(
-                    0x01,
-                    (v & 0x80) !== 0
-                );
-
-                this.A =
-                    this.setZN(
-                        (v << 1) & 0xFF
-                    );
-
-                cycles = 2;
-                break;
-            }
-
-            case 0x0D: {
-                const a = this.addrAbsolute();
-
-                this.A = this.setZN(
-                    this.A |
-                    this.read(a)
-                );
-
-                cycles = 4;
-                break;
-            }
-
-            case 0x0E: {
-                const a = this.addrAbsolute();
-                const v = this.read(a);
-
-                this.setFlag(
-                    0x01,
-                    (v & 0x80) !== 0
-                );
-
-                const r =
-                    (v << 1) & 0xFF;
-
-                this.setZN(r);
-                this.write(a, r);
-
-                cycles = 6;
-                break;
-            }
-
-            case 0x10:
-                cycles = this.branch(
-                    !this.getFlag(0x80)
-                );
-                break;
-
-            case 0x11: {
-                const a = this.addrIndirectY();
+            const address = this.getAddress(mode);
+            const oldValue = this.read(address);
+            const newValue = this.shiftValue(op, oldValue);
 
-                this.A = this.setZN(
-                    this.A |
-                    this.read(a)
-                );
+            this.write(address, newValue);
+
+            return instruction.cycles;
+        }
 
-                cycles = 5;
-                break;
-            }
+        /* -----------------------------------------------------
+           DEC
+           ----------------------------------------------------- */
 
-            case 0x15: {
-                const a = this.addrZeroPageX();
+        if (op === "DEC") {
+            const address = this.getAddress(mode);
+
+            let value = (this.read(address) - 1) & 0xFF;
+
+            this.write(address, value);
+            this.setZN(value);
 
-                this.A = this.setZN(
-                    this.A |
-                    this.read(a)
-                );
+            return instruction.cycles;
+        }
+
+        /* -----------------------------------------------------
+           INC
+           ----------------------------------------------------- */
+
+        if (op === "INC") {
+            const address = this.getAddress(mode);
+
+            let value = (this.read(address) + 1) & 0xFF;
 
-                cycles = 4;
-                break;
-            }
+            this.write(address, value);
+            this.setZN(value);
+
+            return instruction.cycles;
+        }
+
+        /* -----------------------------------------------------
+           Stores
+           ----------------------------------------------------- */
+
+        if (op === "STA") {
+            this.write(this.getAddress(mode), this.A);
+            return instruction.cycles;
+        }
+
+        if (op === "STX") {
+            this.write(this.getAddress(mode), this.X);
+            return instruction.cycles;
+        }
 
-            case 0x16: {
-                const a = this.addrZeroPageX();
-                const v = this.read(a);
-
-                this.setFlag(
-                    0x01,
-                    (v & 0x80) !== 0
-                );
-
-                const r =
-                    (v << 1) & 0xFF;
-
-                this.setZN(r);
-                this.write(a, r);
-
-                cycles = 6;
-                break;
-            }
-
-            case 0x18:
-                this.setFlag(0x01, false);
-                cycles = 2;
-                break;
-
-            case 0x19: {
-                const a = this.addrAbsoluteY();
-
-                this.A = this.setZN(
-                    this.A |
-                    this.read(a)
-                );
-
-                cycles = 4;
-                break;
-            }
-
-            case 0x1D: {
-                const a = this.addrAbsoluteX();
-
-                this.A = this.setZN(
-                    this.A |
-                    this.read(a)
-                );
-
-                cycles = 4;
-                break;
-            }
-
-            case 0x1E: {
-                const a = this.addrAbsoluteX();
-                const v = this.read(a);
-
-                this.setFlag(
-                    0x01,
-                    (v & 0x80) !== 0
-                );
-
-                const r =
-                    (v << 1) & 0xFF;
-
-                this.setZN(r);
-                this.write(a, r);
-
-                cycles = 7;
-                break;
-            }
-
-
-            /* =================================================
-               AND
-            ================================================= */
-
-            case 0x21: {
-                const a = this.addrIndirectX();
-
-                this.A = this.setZN(
-                    this.A &
-                    this.read(a)
-                );
-
-                cycles = 6;
-                break;
-            }
-
-            case 0x25: {
-                const a = this.addrZeroPage();
-
-                this.A = this.setZN(
-                    this.A &
-                    this.read(a)
-                );
-
-                cycles = 3;
-                break;
-            }
-
-            case 0x29:
-                this.A = this.setZN(
-                    this.A &
-                    this.fetchByte()
-                );
-                cycles = 2;
-                break;
-
-            case 0x2D: {
-                const a = this.addrAbsolute();
-
-                this.A = this.setZN(
-                    this.A &
-                    this.read(a)
-                );
-
-                cycles = 4;
-                break;
-            }
-
-            case 0x31: {
-                const a = this.addrIndirectY();
-
-                this.A = this.setZN(
-                    this.A &
-                    this.read(a)
-                );
-
-                cycles = 5;
-                break;
-            }
-
-            case 0x35: {
-                const a = this.addrZeroPageX();
-
-                this.A = this.setZN(
-                    this.A &
-                    this.read(a)
-                );
-
-                cycles = 4;
-                break;
-            }
-
-            case 0x39: {
-                const a = this.addrAbsoluteY();
-
-                this.A = this.setZN(
-                    this.A &
-                    this.read(a)
-                );
-
-                cycles = 4;
-                break;
-            }
-
-            case 0x3D: {
-                const a = this.addrAbsoluteX();
-
-                this.A = this.setZN(
-                    this.A &
-                    this.read(a)
-                );
-
-                cycles = 4;
-                break;
-            }
-
-
-            /* =================================================
-               EOR
-            ================================================= */
-
-            case 0x41: {
-                const a = this.addrIndirectX();
-
-                this.A = this.setZN(
-                    this.A ^
-                    this.read(a)
-                );
-
-                cycles = 6;
-                break;
-            }
-
-            case 0x45: {
-                const a = this.addrZeroPage();
-
-                this.A = this.setZN(
-                    this.A ^
-                    this.read(a)
-                );
-
-                cycles = 3;
-                break;
-            }
-
-            case 0x49:
-                this.A = this.setZN(
-                    this.A ^
-                    this.fetchByte()
-                );
-                cycles = 2;
-                break;
-
-            case 0x4D: {
-                const a = this.addrAbsolute();
-
-                this.A = this.setZN(
-                    this.A ^
-                    this.read(a)
-                );
-
-                cycles = 4;
-                break;
-            }
-
-            case 0x51: {
-                const a = this.addrIndirectY();
-
-                this.A = this.setZN(
-                    this.A ^
-                    this.read(a)
-                );
-
-                cycles = 5;
-                break;
-            }
-
-            case 0x55: {
-                const a = this.addrZeroPageX();
-
-                this.A = this.setZN(
-                    this.A ^
-                    this.read(a)
-                );
-
-                cycles = 4;
-                break;
-            }
-
-            case 0x59: {
-                const a = this.addrAbsoluteY();
-
-                this.A = this.setZN(
-                    this.A ^
-                    this.read(a)
-                );
-
-                cycles = 4;
-                break;
-            }
-
-            case 0x5D: {
-                const a = this.addrAbsoluteX();
-
-                this.A = this.setZN(
-                    this.A ^
-                    this.read(a)
-                );
-
-                cycles = 4;
-                break;
-            }
-
-
-            /* =================================================
-               ADC
-            ================================================= */
-
-            case 0x61:
-                this.adc(
-                    this.read(
-                        this.addrIndirectX()
-                    )
-                );
-                cycles = 6;
-                break;
-
-            case 0x65:
-                this.adc(
-                    this.read(
-                        this.addrZeroPage()
-                    )
-                );
-                cycles = 3;
-                break;
-
-            case 0x69:
-                this.adc(this.fetchByte());
-                cycles = 2;
-                break;
-
-            case 0x6D:
-                this.adc(
-                    this.read(
-                        this.addrAbsolute()
-                    )
-                );
-                cycles = 4;
-                break;
-
-            case 0x71:
-                this.adc(
-                    this.read(
-                        this.addrIndirectY()
-                    )
-                );
-                cycles = 5;
-                break;
-
-            case 0x75:
-                this.adc(
-                    this.read(
-                        this.addrZeroPageX()
-                    )
-                );
-                cycles = 4;
-                break;
-
-            case 0x79:
-                this.adc(
-                    this.read(
-                        this.addrAbsoluteY()
-                    )
-                );
-                cycles = 4;
-                break;
-
-            case 0x7D:
-                this.adc(
-                    this.read(
-                        this.addrAbsoluteX()
-                    )
-                );
-                cycles = 4;
-                break;
-
-
-            /* =================================================
-               STA
-            ================================================= */
-
-            case 0x81:
-                this.write(
-                    this.addrIndirectX(),
-                    this.A
-                );
-                cycles = 6;
-                break;
-
-            case 0x85:
-                this.write(
-                    this.addrZeroPage(),
-                    this.A
-                );
-                cycles = 3;
-                break;
-
-            case 0x8D:
-                this.write(
-                    this.addrAbsolute(),
-                    this.A
-                );
-                cycles = 4;
-                break;
-
-            case 0x91:
-                this.write(
-                    this.addrIndirectY(),
-                    this.A
-                );
-                cycles = 6;
-                break;
-
-            case 0x95:
-                this.write(
-                    this.addrZeroPageX(),
-                    this.A
-                );
-                cycles = 4;
-                break;
-
-            case 0x99:
-                this.write(
-                    this.addrAbsoluteY(),
-                    this.A
-                );
-                cycles = 5;
-                break;
-
-            case 0x9D:
-                this.write(
-                    this.addrAbsoluteX(),
-                    this.A
-                );
-                cycles = 5;
-                break;
-
-
-            /* =================================================
-               STX
-            ================================================= */
-
-            case 0x86:
-                this.write(
-                    this.addrZeroPage(),
-                    this.X
-                );
-                cycles = 3;
-                break;
-
-            case 0x8E:
-                this.write(
-                    this.addrAbsolute(),
-                    this.X
-                );
-                cycles = 4;
-                break;
-
-            case 0x96:
-                this.write(
-                    this.addrZeroPageY(),
-                    this.X
-                );
-                cycles = 4;
-                break;
-
-
-            /* =================================================
-               STY
-            ================================================= */
-
-            case 0x84:
-                this.write(
-                    this.addrZeroPage(),
-                    this.Y
-                );
-                cycles = 3;
-                break;
-
-            case 0x8C:
-                this.write(
-                    this.addrAbsolute(),
-                    this.Y
-                );
-                cycles = 4;
-                break;
-
-            case 0x94:
-                this.write(
-                    this.addrZeroPageX(),
-                    this.Y
-                );
-                cycles = 4;
-                break;
-
-
-            /* =================================================
-               LDA
-            ================================================= */
-
-            case 0xA1:
-                this.A = this.setZN(
-                    this.read(
-                        this.addrIndirectX()
-                    )
-                );
-                cycles = 6;
-                break;
-
-            case 0xA5:
-                this.A = this.setZN(
-                    this.read(
-                        this.addrZeroPage()
-                    )
-                );
-                cycles = 3;
-                break;
-
-            case 0xA9:
-                this.A =
-                    this.setZN(
-                        this.fetchByte()
-                    );
-                cycles = 2;
-                break;
-
-            case 0xAD:
-                this.A = this.setZN(
-                    this.read(
-                        this.addrAbsolute()
-                    )
-                );
-                cycles = 4;
-                break;
-
-            case 0xB1:
-                this.A = this.setZN(
-                    this.read(
-                        this.addrIndirectY()
-                    )
-                );
-                cycles = 5;
-                break;
-
-            case 0xB5:
-                this.A = this.setZN(
-                    this.read(
-                        this.addrZeroPageX()
-                    )
-                );
-                cycles = 4;
-                break;
-
-            case 0xB9:
-                this.A = this.setZN(
-                    this.read(
-                        this.addrAbsoluteY()
-                    )
-                );
-                cycles = 4;
-                break;
-
-            case 0xBD:
-                this.A = this.setZN(
-                    this.read(
-                        this.addrAbsoluteX()
-                    )
-                );
-                cycles = 4;
-                break;
-
-
-            /* =================================================
-               LDX
-            ================================================= */
-
-            case 0xA2:
-                this.X =
-                    this.setZN(
-                        this.fetchByte()
-                    );
-                cycles = 2;
-                break;
-
-            case 0xA6:
-                this.X =
-                    this.setZN(
-                        this.read(
-                            this.addrZeroPage()
-                        )
-                    );
-                cycles = 3;
-                break;
-
-            case 0xAE:
-                this.X =
-                    this.setZN(
-                        this.read(
-                            this.addrAbsolute()
-                        )
-                    );
-                cycles = 4;
-                break;
-
-            case 0xB6:
-                this.X =
-                    this.setZN(
-                        this.read(
-                            this.addrZeroPageY()
-                        )
-                    );
-                cycles = 4;
-                break;
-
-            case 0xBE:
-                this.X =
-                    this.setZN(
-                        this.read(
-                            this.addrAbsoluteY()
-                        )
-                    );
-                cycles = 4;
-                break;
-
-
-            /* =================================================
-               LDY
-            ================================================= */
-
-            case 0xA0:
-                this.Y =
-                    this.setZN(
-                        this.fetchByte()
-                    );
-                cycles = 2;
-                break;
-
-            case 0xA4:
-                this.Y =
-                    this.setZN(
-                        this.read(
-                            this.addrZeroPage()
-                        )
-                    );
-                cycles = 3;
-                break;
-
-            case 0xAC:
-                this.Y =
-                    this.setZN(
-                        this.read(
-                            this.addrAbsolute()
-                        )
-                    );
-                cycles = 4;
-                break;
-
-            case 0xB4:
-                this.Y =
-                    this.setZN(
-                        this.read(
-                            this.addrZeroPageX()
-                        )
-                    );
-                cycles = 4;
-                break;
-
-            case 0xBC:
-                this.Y =
-                    this.setZN(
-                        this.read(
-                            this.addrAbsoluteX()
-                        )
-                    );
-                cycles = 4;
-                break;
-
-
-            /* =================================================
-               CMP
-            ================================================= */
-
-            case 0xC1:
-                this.compare(
-                    this.A,
-                    this.read(
-                        this.addrIndirectX()
-                    )
-                );
-                cycles = 6;
-                break;
-
-            case 0xC5:
-                this.compare(
-                    this.A,
-                    this.read(
-                        this.addrZeroPage()
-                    )
-                );
-                cycles = 3;
-                break;
-
-            case 0xC9:
-                this.compare(
-                    this.A,
-                    this.fetchByte()
-                );
-                cycles = 2;
-                break;
-
-            case 0xCD:
-                this.compare(
-                    this.A,
-                    this.read(
-                        this.addrAbsolute()
-                    )
-                );
-                cycles = 4;
-                break;
-
-            case 0xD1:
-                this.compare(
-                    this.A,
-                    this.read(
-                        this.addrIndirectY()
-                    )
-                );
-                cycles = 5;
-                break;
-
-            case 0xD5:
-                this.compare(
-                    this.A,
-                    this.read(
-                        this.addrZeroPageX()
-                    )
-                );
-                cycles = 4;
-                break;
-
-            case 0xD9:
-                this.compare(
-                    this.A,
-                    this.read(
-                        this.addrAbsoluteY()
-                    )
-                );
-                cycles = 4;
-                break;
-
-            case 0xDD:
-                this.compare(
-                    this.A,
-                    this.read(
-                        this.addrAbsoluteX()
-                    )
-                );
-                cycles = 4;
-                break;
-
-
-            /* =================================================
-               CPX
-            ================================================= */
-
-            case 0xE0:
-                this.compare(
-                    this.X,
-                    this.fetchByte()
-                );
-                cycles = 2;
-                break;
-
-            case 0xE4:
-                this.compare(
-                    this.X,
-                    this.read(
-                        this.addrZeroPage()
-                    )
-                );
-                cycles = 3;
-                break;
-
-            case 0xEC:
-                this.compare(
-                    this.X,
-                    this.read(
-                        this.addrAbsolute()
-                    )
-                );
-                cycles = 4;
-                break;
-
-
-            /* =================================================
-               CPY
-            ================================================= */
-
-            case 0xC0:
-                this.compare(
-                    this.Y,
-                    this.fetchByte()
-                );
-                cycles = 2;
-                break;
-
-            case 0xC4:
-                this.compare(
-                    this.Y,
-                    this.read(
-                        this.addrZeroPage()
-                    )
-                );
-                cycles = 3;
-                break;
-
-            case 0xCC:
-                this.compare(
-                    this.Y,
-                    this.read(
-                        this.addrAbsolute()
-                    )
-                );
-                cycles = 4;
-                break;
-
-
-            /* =================================================
-               SBC
-            ================================================= */
-
-            case 0xE1:
-                this.sbc(
-                    this.read(
-                        this.addrIndirectX()
-                    )
-                );
-                cycles = 6;
-                break;
-
-            case 0xE5:
-                this.sbc(
-                    this.read(
-                        this.addrZeroPage()
-                    )
-                );
-                cycles = 3;
-                break;
-
-            case 0xE9:
-                this.sbc(this.fetchByte());
-                cycles = 2;
-                break;
-
-            case 0xED:
-                this.sbc(
-                    this.read(
-                        this.addrAbsolute()
-                    )
-                );
-                cycles = 4;
-                break;
-
-            case 0xF1:
-                this.sbc(
-                    this.read(
-                        this.addrIndirectY()
-                    )
-                );
-                cycles = 5;
-                break;
-
-            case 0xF5:
-                this.sbc(
-                    this.read(
-                        this.addrZeroPageX()
-                    )
-                );
-                cycles = 4;
-                break;
-
-            case 0xF9:
-                this.sbc(
-                    this.read(
-                        this.addrAbsoluteY()
-                    )
-                );
-                cycles = 4;
-                break;
-
-            case 0xFD:
-                this.sbc(
-                    this.read(
-                        this.addrAbsoluteX()
-                    )
-                );
-                cycles = 4;
-                break;
-
-
-            /* =================================================
-               INC / DEC
-            ================================================= */
-
-            case 0xC6: {
-                const a = this.addrZeroPage();
-                const r =
-                    (this.read(a) - 1) & 0xFF;
-
-                this.setZN(r);
-                this.write(a, r);
-
-                cycles = 5;
-                break;
-            }
-
-            case 0xCE: {
-                const a = this.addrAbsolute();
-                const r =
-                    (this.read(a) - 1) & 0xFF;
-
-                this.setZN(r);
-                this.write(a, r);
-
-                cycles = 6;
-                break;
-            }
-
-            case 0xD6: {
-                const a = this.addrZeroPageX();
-                const r =
-                    (this.read(a) - 1) & 0xFF;
-
-                this.setZN(r);
-                this.write(a, r);
-
-                cycles = 6;
-                break;
-            }
-
-            case 0xDE: {
-                const a = this.addrAbsoluteX();
-                const r =
-                    (this.read(a) - 1) & 0xFF;
-
-                this.setZN(r);
-                this.write(a, r);
-
-                cycles = 7;
-                break;
-            }
-
-            case 0xE6: {
-                const a = this.addrZeroPage();
-                const r =
-                    (this.read(a) + 1) & 0xFF;
-
-                this.setZN(r);
-                this.write(a, r);
-
-                cycles = 5;
-                break;
-            }
-
-            case 0xEE: {
-                const a = this.addrAbsolute();
-                const r =
-                    (this.read(a) + 1) & 0xFF;
-
-                this.setZN(r);
-                this.write(a, r);
-
-                cycles = 6;
-                break;
-            }
-
-            case 0xF6: {
-                const a = this.addrZeroPageX();
-                const r =
-                    (this.read(a) + 1) & 0xFF;
-
-                this.setZN(r);
-                this.write(a, r);
-
-                cycles = 6;
-                break;
-            }
-
-            case 0xFE: {
-                const a = this.addrAbsoluteX();
-                const r =
-                    (this.read(a) + 1) & 0xFF;
-
-                this.setZN(r);
-                this.write(a, r);
-
-                cycles = 7;
-                break;
-            }
-
-
-            /* =================================================
-               ASL accumulator
-            ================================================= */
-
-            case 0x0A:
-                break;
-
-
-            /* =================================================
-               LSR
-            ================================================= */
-
-            case 0x46: {
-                const a = this.addrZeroPage();
-                const v = this.read(a);
-
-                this.setFlag(
-                    0x01,
-                    (v & 1) !== 0
-                );
-
-                const r =
-                    (v >> 1) & 0xFF;
-
-                this.setZN(r);
-                this.write(a, r);
-
-                cycles = 5;
-                break;
-            }
-
-            case 0x4A: {
-
-                const v = this.A;
-
-                this.setFlag(
-                    0x01,
-                    (v & 1) !== 0
-                );
-
-                this.A =
-                    this.setZN(
-                        v >> 1
-                    );
-
-                cycles = 2;
-                break;
-            }
-
-            case 0x4E: {
-                const a = this.addrAbsolute();
-                const v = this.read(a);
-
-                this.setFlag(
-                    0x01,
-                    (v & 1) !== 0
-                );
-
-                const r =
-                    v >> 1;
-
-                this.setZN(r);
-                this.write(a, r);
-
-                cycles = 6;
-                break;
-            }
-
-            case 0x56: {
-                const a = this.addrZeroPageX();
-                const v = this.read(a);
-
-                this.setFlag(
-                    0x01,
-                    (v & 1) !== 0
-                );
-
-                const r =
-                    v >> 1;
-
-                this.setZN(r);
-                this.write(a, r);
-
-                cycles = 6;
-                break;
-            }
-
-            case 0x5E: {
-                const a = this.addrAbsoluteX();
-                const v = this.read(a);
-
-                this.setFlag(
-                    0x01,
-                    (v & 1) !== 0
-                );
-
-                const r =
-                    v >> 1;
-
-                this.setZN(r);
-                this.write(a, r);
-
-                cycles = 7;
-                break;
-            }
-
-
-            /* =================================================
-               ROL
-            ================================================= */
-
-            case 0x26: {
-                const a = this.addrZeroPage();
-                const v = this.read(a);
-
-                const oldCarry =
-                    this.getFlag(0x01)
-                        ? 1
-                        : 0;
-
-                this.setFlag(
-                    0x01,
-                    (v & 0x80) !== 0
-                );
-
-                const r =
-                    ((v << 1) |
-                     oldCarry) & 0xFF;
-
-                this.setZN(r);
-                this.write(a, r);
-
-                cycles = 5;
-                break;
-            }
-
-            case 0x2A: {
-
-                const v = this.A;
-
-                const oldCarry =
-                    this.getFlag(0x01)
-                        ? 1
-                        : 0;
-
-                this.setFlag(
-                    0x01,
-                    (v & 0x80) !== 0
-                );
-
-                this.A =
-                    this.setZN(
-                        ((v << 1) |
-                         oldCarry) & 0xFF
-                    );
-
-                cycles = 2;
-                break;
-            }
-
-            case 0x2E: {
-                const a = this.addrAbsolute();
-                const v = this.read(a);
-
-                const oldCarry =
-                    this.getFlag(0x01)
-                        ? 1
-                        : 0;
-
-                this.setFlag(
-                    0x01,
-                    (v & 0x80) !== 0
-                );
-
-                const r =
-                    ((v << 1) |
-                     oldCarry) & 0xFF;
-
-                this.setZN(r);
-                this.write(a, r);
-
-                cycles = 6;
-                break;
-            }
-
-            case 0x36: {
-                const a = this.addrZeroPageX();
-                const v = this.read(a);
-
-                const oldCarry =
-                    this.getFlag(0x01)
-                        ? 1
-                        : 0;
-
-                this.setFlag(
-                    0x01,
-                    (v & 0x80) !== 0
-                );
-
-                const r =
-                    ((v << 1) |
-                     oldCarry) & 0xFF;
-
-                this.setZN(r);
-                this.write(a, r);
-
-                cycles = 6;
-                break;
-            }
-
-            case 0x3E: {
-                const a = this.addrAbsoluteX();
-                const v = this.read(a);
-
-                const oldCarry =
-                    this.getFlag(0x01)
-                        ? 1
-                        : 0;
-
-                this.setFlag(
-                    0x01,
-                    (v & 0x80) !== 0
-                );
-
-                const r =
-                    ((v << 1) |
-                     oldCarry) & 0xFF;
-
-                this.setZN(r);
-                this.write(a, r);
-
-                cycles = 7;
-                break;
-            }
-
-
-            /* =================================================
-               ROR
-            ================================================= */
-
-            case 0x66: {
-                const a = this.addrZeroPage();
-                const v = this.read(a);
-
-                const oldCarry =
-                    this.getFlag(0x01)
-                        ? 1
-                        : 0;
-
-                this.setFlag(
-                    0x01,
-                    (v & 1) !== 0
-                );
-
-                const r =
-                    (v >> 1) |
-                    (oldCarry << 7);
-
-                this.setZN(r);
-                this.write(a, r);
-
-                cycles = 5;
-                break;
-            }
-
-            case 0x6A: {
-
-                const v = this.A;
-
-                const oldCarry =
-                    this.getFlag(0x01)
-                        ? 1
-                        : 0;
-
-                this.setFlag(
-                    0x01,
-                    (v & 1) !== 0
-                );
-
-                this.A =
-                    this.setZN(
-                        (v >> 1) |
-                        (oldCarry << 7)
-                    );
-
-                cycles = 2;
-                break;
-            }
-
-            case 0x6E: {
-                const a = this.addrAbsolute();
-                const v = this.read(a);
-
-                const oldCarry =
-                    this.getFlag(0x01)
-                        ? 1
-                        : 0;
-
-                this.setFlag(
-                    0x01,
-                    (v & 1) !== 0
-                );
-
-                const r =
-                    (v >> 1) |
-                    (oldCarry << 7);
-
-                this.setZN(r);
-                this.write(a, r);
-
-                cycles = 6;
-                break;
-            }
-
-            case 0x76: {
-                const a = this.addrZeroPageX();
-                const v = this.read(a);
-
-                const oldCarry =
-                    this.getFlag(0x01)
-                        ? 1
-                        : 0;
-
-                this.setFlag(
-                    0x01,
-                    (v & 1) !== 0
-                );
-
-                const r =
-                    (v >> 1) |
-                    (oldCarry << 7);
-
-                this.setZN(r);
-                this.write(a, r);
-
-                cycles = 6;
-                break;
-            }
-
-            case 0x7E: {
-                const a = this.addrAbsoluteX();
-                const v = this.read(a);
-
-                const oldCarry =
-                    this.getFlag(0x01)
-                        ? 1
-                        : 0;
-
-                this.setFlag(
-                    0x01,
-                    (v & 1) !== 0
-                );
-
-                const r =
-                    (v >> 1) |
-                    (oldCarry << 7);
-
-                this.setZN(r);
-                this.write(a, r);
-
-                cycles = 7;
-                break;
-            }
-
-
-            /* =================================================
-               BIT
-            ================================================= */
-
-            case 0x24: {
-                const v =
-                    this.read(
-                        this.addrZeroPage()
-                    );
-
-                this.setFlag(
-                    0x40,
-                    (v & 0x40) !== 0
-                );
-
-                this.setFlag(
-                    0x80,
-                    (v & 0x80) !== 0
-                );
-
-                this.setFlag(
-                    0x02,
-                    (this.A & v) === 0
-                );
-
-                cycles = 3;
-                break;
-            }
-
-            case 0x2C: {
-                const v =
-                    this.read(
-                        this.addrAbsolute()
-                    );
-
-                this.setFlag(
-                    0x40,
-                    (v & 0x40) !== 0
-                );
-
-                this.setFlag(
-                    0x80,
-                    (v & 0x80) !== 0
-                );
-
-                this.setFlag(
-                    0x02,
-                    (this.A & v) === 0
-                );
-
-                cycles = 4;
-                break;
-            }
-
-
-            /* =================================================
+        if (op === "STY") {
+            this.write(this.getAddress(mode), this.Y);
+            return instruction.cycles;
+        }
+
+        /* -----------------------------------------------------
+           Register operations
+           ----------------------------------------------------- */
+
+        switch (op) {
+            case "DEX":
+                this.X = (this.X - 1) & 0xFF;
+                this.setZN(this.X);
+                return instruction.cycles;
+
+            case "DEY":
+                this.Y = (this.Y - 1) & 0xFF;
+                this.setZN(this.Y);
+                return instruction.cycles;
+
+            case "INX":
+                this.X = (this.X + 1) & 0xFF;
+                this.setZN(this.X);
+                return instruction.cycles;
+
+            case "INY":
+                this.Y = (this.Y + 1) & 0xFF;
+                this.setZN(this.Y);
+                return instruction.cycles;
+
+            case "TAX":
+                this.X = this.A;
+                this.setZN(this.X);
+                return instruction.cycles;
+
+            case "TAY":
+                this.Y = this.A;
+                this.setZN(this.Y);
+                return instruction.cycles;
+
+            case "TSX":
+                this.X = this.SP;
+                this.setZN(this.X);
+                return instruction.cycles;
+
+            case "TXA":
+                this.A = this.X;
+                this.setZN(this.A);
+                return instruction.cycles;
+
+            case "TXS":
+                this.SP = this.X;
+                return instruction.cycles;
+
+            case "TYA":
+                this.A = this.Y;
+                this.setZN(this.A);
+                return instruction.cycles;
+
+            /* -------------------------------------------------
+               Flags
+               ------------------------------------------------- */
+
+            case "CLC":
+                this.setFlag(this.FLAG_C, false);
+                return instruction.cycles;
+
+            case "CLD":
+                this.setFlag(this.FLAG_D, false);
+                return instruction.cycles;
+
+            case "CLI":
+                this.setFlag(this.FLAG_I, false);
+                return instruction.cycles;
+
+            case "CLV":
+                this.setFlag(this.FLAG_V, false);
+                return instruction.cycles;
+
+            case "SEC":
+                this.setFlag(this.FLAG_C, true);
+                return instruction.cycles;
+
+            case "SED":
+                this.setFlag(this.FLAG_D, true);
+                return instruction.cycles;
+
+            case "SEI":
+                this.setFlag(this.FLAG_I, true);
+                return instruction.cycles;
+
+            /* -------------------------------------------------
+               Stack
+               ------------------------------------------------- */
+
+            case "PHA":
+                this.push(this.A);
+                return instruction.cycles;
+
+            case "PHP":
+                this.pushStatus(true);
+                return instruction.cycles;
+
+            case "PLA":
+                this.A = this.pop();
+                this.setZN(this.A);
+                return instruction.cycles;
+
+            case "PLP":
+                this.pullStatus();
+                return instruction.cycles;
+
+            /* -------------------------------------------------
                JMP
-            ================================================= */
+               ------------------------------------------------- */
 
-            case 0x4C:
+            case "JMP":
+                if (mode === "abs") {
+                    this.PC = this.addrAbsolute() & 0x1FFF;
+                } else {
+                    const pointer = this.addrAbsolute();
 
-                this.PC =
-                    this.addrAbsolute() &
-                    0x1FFF;
+                    this.PC =
+                        this.readIndirect6502Bug(pointer) & 0x1FFF;
+                }
 
-                cycles = 3;
-                break;
+                return instruction.cycles;
 
-            case 0x6C: {
-
-                const pointer =
-                    this.fetchWord();
-
-                this.PC =
-                    this.readIndirectBug(
-                        pointer
-                    ) & 0x1FFF;
-
-                cycles = 5;
-                break;
-            }
-
-
-            /* =================================================
+            /* -------------------------------------------------
                JSR
-            ================================================= */
+               ------------------------------------------------- */
 
-            case 0x20: {
-
-                const target =
-                    this.fetchWord();
+            case "JSR": {
+                const target = this.addrAbsolute();
 
                 const returnAddress =
-                    (this.PC - 1) &
-                    0x1FFF;
+                    (this.PC - 1) & 0x1FFF;
 
-                this.push(
-                    (returnAddress >> 8) &
-                    0xFF
-                );
+                this.push((returnAddress >> 8) & 0xFF);
+                this.push(returnAddress & 0xFF);
 
-                this.push(
-                    returnAddress & 0xFF
-                );
+                this.PC = target & 0x1FFF;
 
-                this.PC =
-                    target & 0x1FFF;
-
-                cycles = 6;
-                break;
+                return instruction.cycles;
             }
 
-
-            /* =================================================
+            /* -------------------------------------------------
                RTS
-            ================================================= */
+               ------------------------------------------------- */
 
-            case 0x60: {
-
+            case "RTS": {
                 const lo = this.pop();
                 const hi = this.pop();
 
                 this.PC =
-                    ((hi << 8) | lo) &
-                    0x1FFF;
+                    ((lo | (hi << 8)) + 1) & 0x1FFF;
 
-                this.PC =
-                    (this.PC + 1) &
-                    0x1FFF;
-
-                cycles = 6;
-                break;
+                return instruction.cycles;
             }
 
-
-            /* =================================================
+            /* -------------------------------------------------
                RTI
-            ================================================= */
+               ------------------------------------------------- */
 
-            case 0x40: {
-
-                this.P =
-                    this.pop() & 0xEF;
+            case "RTI": {
+                this.pullStatus();
 
                 const lo = this.pop();
                 const hi = this.pop();
 
                 this.PC =
-                    ((hi << 8) | lo) &
-                    0x1FFF;
+                    (lo | (hi << 8)) & 0x1FFF;
 
-                cycles = 6;
-                break;
+                return instruction.cycles;
             }
 
+            /* -------------------------------------------------
+               BRK
+               ------------------------------------------------- */
 
-            /* =================================================
-               STACK
-            ================================================= */
+            case "BRK": {
+                /*
+                 * BRK consumes the following byte as padding.
+                 */
+                this.fetchByte();
 
-            case 0x48:
-                this.push(this.A);
-                cycles = 3;
-                break;
+                const returnAddress = this.PC;
 
-            case 0x68:
-                this.A =
-                    this.setZN(
-                        this.pop()
-                    );
-                cycles = 4;
-                break;
+                this.push((returnAddress >> 8) & 0xFF);
+                this.push(returnAddress & 0xFF);
 
-            case 0x08:
-                this.push(
-                    this.P | 0x10
-                );
-                cycles = 3;
-                break;
+                this.pushStatus(true);
 
-            case 0x28:
-                this.P =
-                    (this.pop() & 0xEF) |
-                    0x20;
-                cycles = 4;
-                break;
+                this.setFlag(this.FLAG_I, true);
 
+                const lo = this.read(0x1FFE);
+                const hi = this.read(0x1FFF);
 
-            /* =================================================
-               TRANSFERS
-            ================================================= */
+                this.PC =
+                    ((lo | (hi << 8)) & 0x1FFF);
 
-            case 0xAA:
-                this.X =
-                    this.setZN(this.A);
-                cycles = 2;
-                break;
+                return instruction.cycles;
+            }
 
-            case 0x8A:
-                this.A =
-                    this.setZN(this.X);
-                cycles = 2;
-                break;
+            /* -------------------------------------------------
+               Branches
+               ------------------------------------------------- */
 
-            case 0xA8:
-                this.Y =
-                    this.setZN(this.A);
-                cycles = 2;
-                break;
+            case "BCC":
+                this.branch(!this.getFlag(this.FLAG_C));
+                return 0;
 
-            case 0x98:
-                this.A =
-                    this.setZN(this.Y);
-                cycles = 2;
-                break;
+            case "BCS":
+                this.branch(this.getFlag(this.FLAG_C));
+                return 0;
 
-            case 0xBA:
-                this.X =
-                    this.setZN(this.SP);
-                cycles = 2;
-                break;
+            case "BEQ":
+                this.branch(this.getFlag(this.FLAG_Z));
+                return 0;
 
-            case 0x9A:
-                this.SP = this.X;
-                cycles = 2;
-                break;
+            case "BMI":
+                this.branch(this.getFlag(this.FLAG_N));
+                return 0;
 
+            case "BNE":
+                this.branch(!this.getFlag(this.FLAG_Z));
+                return 0;
 
-            /* =================================================
-               INX / DEX / INY / DEY
-            ================================================= */
+            case "BPL":
+                this.branch(!this.getFlag(this.FLAG_N));
+                return 0;
 
-            case 0xE8:
-                this.X =
-                    this.setZN(
-                        (this.X + 1) &
-                        0xFF
-                    );
-                cycles = 2;
-                break;
+            case "BVC":
+                this.branch(!this.getFlag(this.FLAG_V));
+                return 0;
 
-            case 0xCA:
-                this.X =
-                    this.setZN(
-                        (this.X - 1) &
-                        0xFF
-                    );
-                cycles = 2;
-                break;
+            case "BVS":
+                this.branch(this.getFlag(this.FLAG_V));
+                return 0;
 
-            case 0xC8:
-                this.Y =
-                    this.setZN(
-                        (this.Y + 1) &
-                        0xFF
-                    );
-                cycles = 2;
-                break;
-
-            case 0x88:
-                this.Y =
-                    this.setZN(
-                        (this.Y - 1) &
-                        0xFF
-                    );
-                cycles = 2;
-                break;
-
-
-            /* =================================================
-               FLAGS
-            ================================================= */
-
-            case 0x38:
-                this.setFlag(0x01, true);
-                cycles = 2;
-                break;
-
-            case 0x58:
-                this.setFlag(0x04, false);
-                cycles = 2;
-                break;
-
-            case 0x78:
-                this.setFlag(0x04, true);
-                cycles = 2;
-                break;
-
-            case 0xB8:
-                this.setFlag(0x40, false);
-                cycles = 2;
-                break;
-
-            case 0xD8:
-                this.setFlag(0x08, false);
-                cycles = 2;
-                break;
-
-            case 0xF8:
-                this.setFlag(0x08, true);
-                cycles = 2;
-                break;
-
-
-            /* =================================================
-               BRANCHES
-            ================================================= */
-
-            case 0x30:
-                cycles =
-                    this.branch(
-                        this.getFlag(0x80)
-                    );
-                break;
-
-            case 0x50:
-                cycles =
-                    this.branch(
-                        !this.getFlag(0x40)
-                    );
-                break;
-
-            case 0x70:
-                cycles =
-                    this.branch(
-                        this.getFlag(0x40)
-                    );
-                break;
-
-            case 0x90:
-                cycles =
-                    this.branch(
-                        !this.getFlag(0x01)
-                    );
-                break;
-
-            case 0xB0:
-                cycles =
-                    this.branch(
-                        this.getFlag(0x01)
-                    );
-                break;
-
-            case 0xD0:
-                cycles =
-                    this.branch(
-                        !this.getFlag(0x02)
-                    );
-                break;
-
-            case 0xF0:
-                cycles =
-                    this.branch(
-                        this.getFlag(0x02)
-                    );
-                break;
-
-
-            /* =================================================
+            /* -------------------------------------------------
                NOP
-            ================================================= */
+               ------------------------------------------------- */
 
-            case 0xEA:
-                cycles = 2;
-                break;
-
-
-            /* =================================================
-               Remaining official NOP-like opcodes are treated
-               conservatively.
-
-               Illegal opcodes are NOT silently implemented yet.
-               We stop them visibly instead of pretending that
-               their behavior is correct.
-            ================================================= */
+            case "NOP":
+                return instruction.cycles;
 
             default:
-
-                this.halted = true;
-
-                console.warn(
-                    "Unsupported opcode $" +
-                    opcode.toString(16).padStart(2, "0") +
-                    " at $" +
-                    ((this.PC - 1) & 0x1FFF)
-                        .toString(16)
-                        .padStart(4, "0")
+                throw new Error(
+                    "Unimplemented official 6507 instruction: " +
+                    op
                 );
+        }
+    }
 
-                cycles = 2;
+    /* =========================================================
+       RESET
+       ========================================================= */
 
-                break;
+    reset() {
+        this.A = 0;
+        this.X = 0;
+        this.Y = 0;
+
+        this.SP = 0xFD;
+
+        /*
+         * The reset vector is at $FFFC/$FFFD on the
+         * 6502 address space. The 6507 only exposes 13
+         * address bits, so these become $1FFC/$1FFD.
+         */
+        const lo = this.read(0x1FFC);
+        const hi = this.read(0x1FFD);
+
+        this.PC =
+            ((lo | (hi << 8)) & 0x1FFF);
+
+        this.P = this.FLAG_U | this.FLAG_I;
+
+        this.halted = false;
+        this.waiting = false;
+    }
+
+    /* =========================================================
+       IRQ
+       ========================================================= */
+
+    irq() {
+        if (this.getFlag(this.FLAG_I)) {
+            return;
         }
 
-        this.cycles = cycles;
+        this.push((this.PC >> 8) & 0xFF);
+        this.push(this.PC & 0xFF);
 
-        this.totalCycles += cycles;
+        this.pushStatus(false);
 
-        this.bus.tick(cycles);
+        this.setFlag(this.FLAG_I, true);
 
-        return cycles;
+        const lo = this.read(0x1FFE);
+        const hi = this.read(0x1FFF);
+
+        this.PC =
+            ((lo | (hi << 8)) & 0x1FFF);
+
+        this.tick(7);
+    }
+
+    /* =========================================================
+       SINGLE CPU INSTRUCTION
+       ========================================================= */
+
+    step() {
+        if (this.halted) {
+            return;
+        }
+
+        if (this.waiting) {
+            return;
+        }
+
+        const opcode = this.fetchByte();
+
+        const instruction = this.opcodes[opcode];
+
+        if (!instruction) {
+            /*
+             * We deliberately stop on undocumented opcodes
+             * for now. Atari bank-switching / game-specific
+             * undocumented instructions can be added later
+             * after the official CPU is verified.
+             */
+            this.halted = true;
+
+            throw new Error(
+                "Unsupported / undocumented 6507 opcode: $" +
+                opcode.toString(16).padStart(2, "0").toUpperCase() +
+                " at $" +
+                ((this.PC - 1) & 0x1FFF)
+                    .toString(16)
+                    .padStart(4, "0")
+                    .toUpperCase()
+            );
+        }
+
+        const cycles = this.execute(instruction);
+
+        /*
+         * Branch() already performed its timing because it
+         * has variable 2/3/4-cycle behavior.
+         */
+        if (cycles > 0) {
+            this.tick(cycles);
+        }
     }
 }
 
