@@ -379,148 +379,575 @@ class AtariCartridge {
 ========================================================= */
 
 class Riot {
-
     constructor() {
+        /* =====================================================
+           128 BYTES INTERNAL RAM
+           ===================================================== */
 
         this.ram = new Uint8Array(128);
 
-        /*
-         * RIOT ports.
-         *
-         * These are kept here so the CPU bus is already
-         * structured correctly before we implement the
-         * complete timer/controller behavior.
-         */
+        /* =====================================================
+           PORT A - JOYSTICKS
+           ===================================================== */
 
         this.swcha = 0xFF;
         this.swacnt = 0x00;
 
+        /*
+         * External joystick state.
+         *
+         * Atari 2600 joystick inputs are active LOW:
+         * 0 = direction pressed
+         * 1 = direction released
+         *
+         * SWCHA:
+         *
+         * D7 = P0 Right
+         * D6 = P0 Left
+         * D5 = P0 Down
+         * D4 = P0 Up
+         *
+         * D3 = P1 Right
+         * D2 = P1 Left
+         * D1 = P1 Down
+         * D0 = P1 Up
+         */
+        this.joystick = 0xFF;
+
+        /* =====================================================
+           PORT B - CONSOLE SWITCHES
+           ===================================================== */
+
+        /*
+         * Default:
+         *
+         * D7 = P1 difficulty
+         * D6 = P0 difficulty
+         * D5 = unused
+         * D4 = unused
+         * D3 = Color/B&W
+         * D2 = unused
+         * D1 = Select
+         * D0 = Reset
+         *
+         * 1 = released / normal
+         * 0 = pressed
+         */
         this.swchb = 0xFF;
+
+        /*
+         * Port B is effectively input-only on the 2600.
+         */
         this.swbcnt = 0x00;
 
-        this.intim = 0;
+        /* =====================================================
+           RIOT TIMER
+           ===================================================== */
 
-        this.timerRunning = false;
-        this.timerDivider = 0;
-        this.timerCounter = 0;
+        this.timerValue = 0;
+        this.timerInterval = 1;
+
+        /*
+         * Number of CPU cycles until the next timer decrement.
+         */
+        this.timerCycles = 0;
+
+        /*
+         * After reaching zero the RIOT keeps zero for one
+         * complete interval. Then it changes to FF and
+         * decrements every CPU cycle.
+         */
+        this.timerZeroHold = false;
+        this.timerExpired = false;
+
+        /* =====================================================
+           RESET
+           ===================================================== */
+
+        this.reset();
     }
 
-    reset() {
+    /* =========================================================
+       RESET
+       ========================================================= */
 
+    reset() {
         this.ram.fill(0);
 
         this.swcha = 0xFF;
         this.swacnt = 0x00;
 
+        this.joystick = 0xFF;
+
         this.swchb = 0xFF;
         this.swbcnt = 0x00;
 
-        this.intim = 0;
+        this.timerValue = 0;
+        this.timerInterval = 1;
+        this.timerCycles = 0;
 
-        this.timerRunning = false;
-        this.timerDivider = 0;
-        this.timerCounter = 0;
+        this.timerZeroHold = false;
+        this.timerExpired = false;
     }
+
+    /* =========================================================
+       ADDRESS DECODING
+       ========================================================= */
+
+    normalizeAddress(address) {
+        /*
+         * RIOT occupies the $0280-$0297 area.
+         *
+         * The 2600 has a 13-bit address bus, so only the
+         * lower 13 bits are physically present.
+         */
+        return address & 0x1FFF;
+    }
+
+    /* =========================================================
+       RAM
+       ========================================================= */
+
+    isRAMAddress(address) {
+        /*
+         * RIOT RAM:
+         *
+         * $0080-$00FF
+         *
+         * The RAM is mirrored throughout the appropriate
+         * RIOT address decoding regions.
+         */
+        return (
+            (address & 0x0180) === 0x0080
+        );
+    }
+
+    ramAddress(address) {
+        return address & 0x7F;
+    }
+
+    /* =========================================================
+       REGISTER DECODING
+       ========================================================= */
+
+    registerAddress(address) {
+        /*
+         * Main RIOT register block:
+         *
+         * $0280-$0297
+         *
+         * We use the low 5 bits for the register selection.
+         */
+        return address & 0x1F;
+    }
+
+    /* =========================================================
+       READ
+       ========================================================= */
 
     read(address) {
+        address = this.normalizeAddress(address);
 
-        address &= 0x3FF;
+        /* -----------------------------------------------------
+           RAM
+           ----------------------------------------------------- */
 
-        /*
-         * RAM mirror.
-         */
-        if ((address & 0x180) === 0x080) {
-
-            return this.ram[address & 0x7F];
+        if (this.isRAMAddress(address)) {
+            return this.ram[this.ramAddress(address)];
         }
 
+        /* -----------------------------------------------------
+           RIOT registers
+           ----------------------------------------------------- */
+
         /*
-         * RIOT I/O and timer.
+         * Registers are located at $0280-$0297.
+         *
+         * Mirroring is handled by the lower register bits.
          */
-        switch (address & 0x1F) {
+        if ((address & 0x0700) === 0x0200) {
+            const reg = this.registerAddress(address);
 
-            case 0x00:
-                return this.swcha;
+            switch (reg) {
+                /*
+                 * SWCHA
+                 */
+                case 0x00:
+                    return this.readSWCHA();
 
-            case 0x02:
-                return this.swchb;
+                /*
+                 * SWACNT
+                 */
+                case 0x01:
+                    return this.swacnt;
 
-            case 0x04:
-                return this.intim;
+                /*
+                 * SWCHB
+                 */
+                case 0x02:
+                    return this.swchb;
 
-            default:
-                return 0xFF;
+                /*
+                 * SWBCNT
+                 */
+                case 0x03:
+                    return this.swbcnt;
+
+                /*
+                 * INTIM
+                 */
+                case 0x04:
+                    return this.readTimer();
+
+                /*
+                 * INSTAT
+                 *
+                 * Bit 7 indicates timer underflow.
+                 */
+                case 0x05:
+                    return this.timerExpired ? 0x80 : 0x00;
+
+                default:
+                    /*
+                     * Other RIOT register mirrors are currently
+                     * unused/read as zero.
+                     */
+                    return 0x00;
+            }
         }
+
+        return 0xFF;
     }
+
+    /* =========================================================
+       WRITE
+       ========================================================= */
 
     write(address, value) {
-
-        address &= 0x3FF;
+        address = this.normalizeAddress(address);
         value &= 0xFF;
 
-        /*
-         * RAM.
-         */
-        if ((address & 0x180) === 0x080) {
+        /* -----------------------------------------------------
+           RAM
+           ----------------------------------------------------- */
 
-            this.ram[address & 0x7F] = value;
+        if (this.isRAMAddress(address)) {
+            this.ram[this.ramAddress(address)] = value;
             return;
         }
 
-        switch (address & 0x1F) {
+        /* -----------------------------------------------------
+           RIOT registers
+           ----------------------------------------------------- */
 
-            case 0x01:
-                this.swacnt = value;
-                break;
+        if ((address & 0x0700) === 0x0200) {
+            const reg = this.registerAddress(address);
 
-            case 0x03:
-                this.swbcnt = value;
-                break;
+            switch (reg) {
+                /*
+                 * SWCHA
+                 */
+                case 0x00:
+                    this.swcha = value;
+                    return;
 
-            case 0x14:
-                this.startTimer(value, 1);
-                break;
+                /*
+                 * SWACNT
+                 */
+                case 0x01:
+                    this.swacnt = value;
+                    return;
 
-            case 0x15:
-                this.startTimer(value, 8);
-                break;
+                /*
+                 * SWCHB
+                 *
+                 * Hardware is input-only for the normal
+                 * console switches, so writes are ignored.
+                 */
+                case 0x02:
+                    return;
 
-            case 0x16:
-                this.startTimer(value, 64);
-                break;
+                /*
+                 * SWBCNT
+                 */
+                case 0x03:
+                    this.swbcnt = value;
+                    return;
 
-            case 0x17:
-                this.startTimer(value, 1024);
-                break;
-        }
-    }
+                /*
+                 * TIM1T
+                 */
+                case 0x14:
+                    this.loadTimer(value, 1);
+                    return;
 
-    startTimer(value, divider) {
+                /*
+                 * TIM8T
+                 */
+                case 0x15:
+                    this.loadTimer(value, 8);
+                    return;
 
-        this.intim = value & 0xFF;
-        this.timerDivider = divider;
-        this.timerCounter = divider;
-        this.timerRunning = true;
-    }
+                /*
+                 * TIM64T
+                 */
+                case 0x16:
+                    this.loadTimer(value, 64);
+                    return;
 
-    tick(cpuCycles) {
+                /*
+                 * T1024T
+                 */
+                case 0x17:
+                    this.loadTimer(value, 1024);
+                    return;
 
-        if (!this.timerRunning) {
-            return;
-        }
-
-        for (let i = 0; i < cpuCycles; i++) {
-
-            this.timerCounter--;
-
-            if (this.timerCounter <= 0) {
-
-                this.timerCounter = this.timerDivider;
-
-                if (this.intim > 0) {
-                    this.intim--;
-                }
+                default:
+                    return;
             }
+        }
+    }
+
+    /* =========================================================
+       PORT A
+       ========================================================= */
+
+    readSWCHA() {
+        /*
+         * For every bit:
+         *
+         * DDR = 1 -> output
+         * DDR = 0 -> input
+         *
+         * Output pins return the value written to SWCHA.
+         * Input pins return the external joystick state.
+         */
+        return (
+            (this.swcha & this.swacnt) |
+            (this.joystick & (~this.swacnt & 0xFF))
+        ) & 0xFF;
+    }
+
+    /* =========================================================
+       JOYSTICK INPUT
+       ========================================================= */
+
+    setJoystick(value) {
+        this.joystick = value & 0xFF;
+    }
+
+    setPlayer0Joystick(up, down, left, right) {
+        let value = this.joystick;
+
+        /*
+         * P0:
+         * D7 right
+         * D6 left
+         * D5 down
+         * D4 up
+         */
+
+        value = up
+            ? value & ~0x10
+            : value | 0x10;
+
+        value = down
+            ? value & ~0x20
+            : value | 0x20;
+
+        value = left
+            ? value & ~0x40
+            : value | 0x40;
+
+        value = right
+            ? value & ~0x80
+            : value | 0x80;
+
+        this.joystick = value & 0xFF;
+    }
+
+    setPlayer1Joystick(up, down, left, right) {
+        let value = this.joystick;
+
+        /*
+         * P1:
+         * D3 right
+         * D2 left
+         * D1 down
+         * D0 up
+         */
+
+        value = up
+            ? value & ~0x01
+            : value | 0x01;
+
+        value = down
+            ? value & ~0x02
+            : value | 0x02;
+
+        value = left
+            ? value & ~0x04
+            : value | 0x04;
+
+        value = right
+            ? value & ~0x08
+            : value | 0x08;
+
+        this.joystick = value & 0xFF;
+    }
+
+    /* =========================================================
+       CONSOLE SWITCHES
+       ========================================================= */
+
+    setConsoleSwitches(value) {
+        this.swchb = value & 0xFF;
+    }
+
+    setResetPressed(pressed) {
+        if (pressed) {
+            this.swchb &= ~0x01;
+        } else {
+            this.swchb |= 0x01;
+        }
+    }
+
+    setSelectPressed(pressed) {
+        if (pressed) {
+            this.swchb &= ~0x02;
+        } else {
+            this.swchb |= 0x02;
+        }
+    }
+
+    setColorMode(color) {
+        if (color) {
+            this.swchb |= 0x08;
+        } else {
+            this.swchb &= ~0x08;
+        }
+    }
+
+    setPlayer0Difficulty(pro) {
+        if (pro) {
+            this.swchb |= 0x40;
+        } else {
+            this.swchb &= ~0x40;
+        }
+    }
+
+    setPlayer1Difficulty(pro) {
+        if (pro) {
+            this.swchb |= 0x80;
+        } else {
+            this.swchb &= ~0x80;
+        }
+    }
+
+    /* =========================================================
+       TIMER
+       ========================================================= */
+
+    loadTimer(value, interval) {
+        /*
+         * The RIOT timer receives an 8-bit value.
+         *
+         * 0 is treated as 256 intervals by the hardware.
+         */
+        this.timerValue = value & 0xFF;
+
+        this.timerInterval = interval;
+        this.timerCycles = interval;
+
+        this.timerZeroHold = false;
+        this.timerExpired = false;
+    }
+
+    readTimer() {
+        return this.timerValue & 0xFF;
+    }
+
+    /* =========================================================
+       TIMER TICK
+       ========================================================= */
+
+    tick(cycles) {
+        cycles = cycles | 0;
+
+        if (cycles <= 0) {
+            return;
+        }
+
+        while (cycles > 0) {
+            /*
+             * Normal interval counting.
+             */
+            if (!this.timerExpired) {
+                if (this.timerCycles > cycles) {
+                    this.timerCycles -= cycles;
+                    return;
+                }
+
+                cycles -= this.timerCycles;
+
+                this.timerCycles = this.timerInterval;
+
+                /*
+                 * Timer reaches zero.
+                 */
+                if (this.timerValue > 0) {
+                    this.timerValue--;
+
+                    if (this.timerValue === 0) {
+                        this.timerZeroHold = true;
+                    }
+                } else {
+                    /*
+                     * The zero state lasts for one complete
+                     * interval. After that the timer enters
+                     * free-running mode at FF.
+                     */
+                    if (this.timerZeroHold) {
+                        this.timerZeroHold = false;
+                        this.timerExpired = true;
+                        this.timerValue = 0xFF;
+
+                        /*
+                         * From this point onward it decrements
+                         * every single CPU cycle.
+                         */
+                        this.timerCycles = 1;
+                    }
+                }
+
+                continue;
+            }
+
+            /*
+             * Timer has expired.
+             *
+             * After underflow it counts FF -> FE -> FD...
+             * once per CPU cycle.
+             */
+            const decrement = Math.min(
+                cycles,
+                this.timerValue
+            );
+
+            this.timerValue =
+                (this.timerValue - decrement) & 0xFF;
+
+            cycles -= decrement;
+
+            if (cycles <= 0) {
+                return;
+            }
+
+            /*
+             * Once it wraps again it remains in the
+             * free-running state.
+             */
+            this.timerValue = 0xFF;
         }
     }
 }
