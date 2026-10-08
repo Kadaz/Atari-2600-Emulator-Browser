@@ -2426,6 +2426,7 @@ class CPU6507 {
 
         this.halted = false;
         this.waiting = false;
+        this.totalCycles = 0;
     }
 
     /* =========================================================
@@ -2458,48 +2459,77 @@ class CPU6507 {
        ========================================================= */
 
     step() {
-        if (this.halted) {
-            return;
-        }
+    if (this.halted) {
+        return 0;
+    }
 
-        if (this.waiting) {
-            return;
-        }
+    if (this.waiting) {
+        return 0;
+    }
 
-        const opcode = this.fetchByte();
+    const opcodeAddress = this.PC;
 
-        const instruction = this.opcodes[opcode];
+    const opcode = this.fetchByte();
 
-        if (!instruction) {
-            /*
-             * We deliberately stop on undocumented opcodes
-             * for now. Atari bank-switching / game-specific
-             * undocumented instructions can be added later
-             * after the official CPU is verified.
-             */
-            this.halted = true;
+    const instruction = this.opcodes[opcode];
 
-            throw new Error(
-                "Unsupported / undocumented 6507 opcode: $" +
-                opcode.toString(16).padStart(2, "0").toUpperCase() +
-                " at $" +
-                ((this.PC - 1) & 0x1FFF)
-                    .toString(16)
-                    .padStart(4, "0")
-                    .toUpperCase()
-            );
-        }
-
-        const cycles = this.execute(instruction);
+    if (!instruction) {
 
         /*
-         * Branch() already performed its timing because it
-         * has variable 2/3/4-cycle behavior.
+         * The Atari 2600 software library contains cartridges
+         * that use undocumented 6502-family instructions.
+         *
+         * We do NOT silently treat an unknown opcode as NOP.
+         * For now report it clearly so we can add its real
+         * behavior.
          */
-        if (cycles > 0) {
-            this.tick(cycles);
-        }
+
+        this.halted = true;
+
+        throw new Error(
+            "Unsupported / undocumented 6507 opcode: $" +
+            opcode.toString(16)
+                .padStart(2, "0")
+                .toUpperCase() +
+            " at $" +
+            (opcodeAddress & 0x1FFF)
+                .toString(16)
+                .padStart(4, "0")
+                .toUpperCase()
+        );
     }
+
+    const cycles = this.execute(instruction);
+
+    /*
+     * Some instructions, such as branches, calculate their
+     * own timing inside execute().
+     */
+    if (cycles > 0) {
+        this.tick(cycles);
+    }
+
+    /*
+     * Keep a running CPU-cycle counter.
+     *
+     * This is useful for debugging and, later, for exact
+     * CPU/TIA synchronization.
+     */
+    if (typeof this.totalCycles !== "number") {
+        this.totalCycles = 0;
+    }
+
+    const usedCycles = cycles > 0 ? cycles : 0;
+
+    this.totalCycles += usedCycles;
+
+    /*
+     * IMPORTANT:
+     * runFrame() needs to know how many CPU cycles this
+     * instruction consumed.
+     */
+    return usedCycles;
+}
 }
 
 
