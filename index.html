@@ -1531,7 +1531,7 @@ class CPU6507 {
         this.setZN(this.A);
     }
 
-    sbc(value) {
+    (value) {
         value &= 0xFF;
 
         const a = this.A;
@@ -1951,6 +1951,9 @@ class CPU6507 {
             [0xE1, "izx", 6],
             [0xF1, "izy", 5, true]
         ]);
+          
+          /* ISC / ISB - undocumented 6502 instruction */
+          this.define(0xFF, "ISC", "absx", 7);
 
         /* SEC / SED / SEI */
         this.define(0x38, "SEC", "imp", 2);
@@ -2130,6 +2133,17 @@ class CPU6507 {
 
             return instruction.cycles;
         }
+
+          /* ISC / ISB - Increment memory, then subtract */
+if (op === "ISC") {
+    const address = this.getAddress(mode);
+    const value = (this.read(address) + 1) & 0xFF;
+
+    this.write(address, value);
+    this.sbc(value);
+
+    return instruction.cycles;
+}
 
         /* -----------------------------------------------------
            Stores
