@@ -1531,7 +1531,7 @@ class CPU6507 {
         this.setZN(this.A);
     }
 
-    (value) {
+   sbc(value) {
         value &= 0xFF;
 
         const a = this.A;
