@@ -954,33 +954,40 @@ class Riot {
 
 
 /* =========================================================
-   TIA PLACEHOLDER
+   TIA - FIRST RASTER RENDERER
 ========================================================= */
 
 class TIA {
 
     constructor() {
-
-        /*
-         * The registers are stored now so that CPU writes
-         * already have a real hardware destination.
-         *
-         * Rendering is intentionally NOT implemented yet.
-         */
-
         this.registers = new Uint8Array(0x40);
+
+        this.width = 160;
+        this.height = 192;
 
         this.colorClock = 0;
         this.scanline = 0;
 
         this.vsync = false;
         this.vblank = false;
-
         this.wsync = false;
+
+        this.canvas = document.getElementById("screen");
+        this.canvas.width = this.width;
+        this.canvas.height = this.height;
+
+        this.context = this.canvas.getContext("2d");
+        this.imageData = this.context.createImageData(
+            this.width,
+            this.height
+        );
+
+        this.framebuffer = this.imageData.data;
+
+        this.clearFrame();
     }
 
     reset() {
-
         this.registers.fill(0);
 
         this.colorClock = 0;
@@ -988,25 +995,136 @@ class TIA {
 
         this.vsync = false;
         this.vblank = false;
-
         this.wsync = false;
+
+        this.clearFrame();
+        this.present();
+    }
+
+    clearFrame() {
+        this.framebuffer.fill(0);
+    }
+
+    present() {
+        this.context.putImageData(this.imageData, 0, 0);
+    }
+
+    colorToRGB(value) {
+        value &= 0xFE;
+
+        const hue = (value >> 4) & 0x0F;
+        const lum = (value & 0x0E) >> 1;
+
+        const brightness = lum / 7;
+
+        if (hue === 0) {
+            const gray = Math.round(brightness * 255);
+            return [gray, gray, gray];
+        }
+
+        const angle = ((hue * 22.5) - 15) * Math.PI / 180;
+        const saturation = 0.85;
+
+        const c = brightness * saturation;
+        const x = c * (1 - Math.abs(
+            ((angle / (Math.PI / 3)) % 2) - 1
+        ));
+        const m = brightness - c;
+
+        let r = 0;
+        let g = 0;
+        let b = 0;
+
+        const sector = ((Math.floor(
+            angle / (Math.PI / 3)
+        ) % 6) + 6) % 6;
+
+        switch (sector) {
+            case 0: r = c; g = x; break;
+            case 1: r = x; g = c; break;
+            case 2: g = c; b = x; break;
+            case 3: g = x; b = c; break;
+            case 4: r = x; b = c; break;
+            case 5: r = c; b = x; break;
+        }
+
+        return [
+            Math.round((r + m) * 255),
+            Math.round((g + m) * 255),
+            Math.round((b + m) * 255)
+        ];
+    }
+
+    playfieldPixel(x) {
+        const pf0 = this.registers[0x0D];
+        const pf1 = this.registers[0x0E];
+        const pf2 = this.registers[0x0F];
+        const control = this.registers[0x0A];
+
+        let bit = 0;
+
+        if (x < 16) {
+            bit = (pf0 >> (4 + Math.floor(x / 4))) & 1;
+        } else if (x < 48) {
+            bit = (pf1 >> (7 - Math.floor((x - 16) / 4))) & 1;
+        } else if (x < 80) {
+            bit = (pf2 >> Math.floor((x - 48) / 4)) & 1;
+        } else if (control & 0x01) {
+            if (x < 112) {
+                bit = (pf2 >> (7 - Math.floor((x - 80) / 4))) & 1;
+            } else if (x < 144) {
+                bit = (pf1 >> Math.floor((x - 112) / 4)) & 1;
+            } else {
+                bit = (pf0 >> (7 - Math.floor((x - 144) / 4))) & 1;
+            }
+        } else {
+            const mirrorX = 159 - x;
+
+            if (mirrorX < 16) {
+                bit = (pf0 >> (4 + Math.floor(mirrorX / 4))) & 1;
+            } else if (mirrorX < 48) {
+                bit = (pf1 >> (7 - Math.floor((mirrorX - 16) / 4))) & 1;
+            } else {
+                bit = (pf2 >> Math.floor((mirrorX - 48) / 4)) & 1;
+            }
+        }
+
+        return bit;
+    }
+
+    drawPixel(x, y) {
+        if (x < 0 || x >= this.width ||
+            y < 0 || y >= this.height) {
+            return;
+        }
+
+        const index = (y * this.width + x) * 4;
+
+        if (this.vblank) {
+            this.framebuffer[index] = 0;
+            this.framebuffer[index + 1] = 0;
+            this.framebuffer[index + 2] = 0;
+            this.framebuffer[index + 3] = 255;
+            return;
+        }
+
+        const playfield = this.playfieldPixel(x);
+        const colorCode = playfield
+            ? this.registers[0x08]
+            : this.registers[0x09];
+
+        const rgb = this.colorToRGB(colorCode);
+
+        this.framebuffer[index] = rgb[0];
+        this.framebuffer[index + 1] = rgb[1];
+        this.framebuffer[index + 2] = rgb[2];
+        this.framebuffer[index + 3] = 255;
     }
 
     read(address) {
-
-        /*
-         * TIA read registers:
-         *
-         * $30-$3D are collision/input registers.
-         *
-         * Until the complete collision system is implemented,
-         * return the hardware-like idle value.
-         */
-
         address &= 0x3F;
 
         switch (address) {
-
             case 0x30:
             case 0x31:
             case 0x32:
@@ -1021,8 +1139,6 @@ class TIA {
             case 0x39:
             case 0x3A:
             case 0x3B:
-                return 0x80;
-
             case 0x3C:
             case 0x3D:
                 return 0x80;
@@ -1033,14 +1149,12 @@ class TIA {
     }
 
     write(address, value) {
-
         address &= 0x3F;
         value &= 0xFF;
 
         this.registers[address] = value;
 
         switch (address) {
-
             case 0x00:
                 this.vsync = (value & 0x02) !== 0;
                 break;
@@ -1050,39 +1164,39 @@ class TIA {
                 break;
 
             case 0x02:
-                /*
-                 * WSYNC is a CPU/TIA synchronization event.
-                 * The CPU will be connected to this in the
-                 * timing stage.
-                 */
                 this.wsync = true;
-                break;
-
-            case 0x2A:
-                /*
-                 * HMOVE.
-                 *
-                 * Actual horizontal motion will be implemented
-                 * together with the beam renderer.
-                 */
                 break;
         }
     }
 
     tickColorClocks(count) {
+        for (let i = 0; i < count; i++) {
 
-        this.colorClock += count;
+            if (
+                this.colorClock >= 68 &&
+                this.colorClock < 228
+            ) {
+                const x = this.colorClock - 68;
+                const y = this.scanline - 40;
 
-        while (this.colorClock >= 228) {
-
-            this.colorClock -= 228;
-            this.scanline++;
-
-            if (this.scanline >= 262) {
-                this.scanline = 0;
+                if (y >= 0 && y < this.height) {
+                    this.drawPixel(x, y);
+                }
             }
 
-            this.wsync = false;
+            this.colorClock++;
+
+            if (this.colorClock >= 228) {
+                this.colorClock = 0;
+                this.scanline++;
+
+                if (this.scanline >= 262) {
+                    this.scanline = 0;
+                    this.present();
+                }
+
+                this.wsync = false;
+            }
         }
     }
 }
@@ -2679,34 +2793,25 @@ class Atari2600 {
     }
 
     runFrame() {
-
-        if (!this.bus.cartridge.rom) {
-            return;
-        }
-
-        /*
-         * One NTSC scanline = 76 CPU cycles.
-         *
-         * This first stage executes one complete scanline's
-         * worth of CPU cycles.
-         *
-         * The real frame scheduler will be connected after
-         * the TIA renderer is implemented.
-         */
-        let target =
-            cpuCyclesPerScanline();
-
-        while (target > 0 &&
-               !this.cpu.halted) {
-
-            const used =
-                this.cpu.step();
-
-            target -= used;
-        }
-
-        this.updateCPUInfo();
+    if (!this.bus.cartridge.rom) {
+        return;
     }
+
+    const target = cpuCyclesPerScanline() * 262;
+    let executed = 0;
+
+    while (executed < target && !this.cpu.halted) {
+        const used = this.cpu.step();
+
+        if (!Number.isFinite(used) || used <= 0) {
+            throw new Error("Invalid CPU cycle count");
+        }
+
+        executed += used;
+    }
+
+    this.updateCPUInfo();
+}
 }
 
 
