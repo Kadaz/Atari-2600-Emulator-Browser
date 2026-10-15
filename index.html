@@ -2800,15 +2800,23 @@ class Atari2600 {
     const target = cpuCyclesPerScanline() * 262;
     let executed = 0;
 
-    while (executed < target && !this.cpu.halted) {
-        const used = this.cpu.step();
+    while (
+    executed < target &&
+    !this.cpu.halted &&
+    !this.cpu.waiting
+) {
+    const used = this.cpu.step();
 
-        if (!Number.isFinite(used) || used <= 0) {
-            throw new Error("Invalid CPU cycle count");
-        }
-
-        executed += used;
+    if (!Number.isFinite(used)) {
+        throw new Error("Invalid CPU cycle count");
     }
+
+    if (used <= 0) {
+        break;
+    }
+
+    executed += used;
+}
 
     this.updateCPUInfo();
 }
