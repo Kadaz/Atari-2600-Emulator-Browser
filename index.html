@@ -2114,31 +2114,29 @@ class CPU6507 {
        ========================================================= */
 
     branch(condition) {
-        const offset = this.fetchByte();
+    const offset = this.fetchByte();
 
-        if (!condition) {
-            this.tick(2);
-            return;
-        }
-
-        const oldPC = this.PC;
-
-        const signedOffset =
-            (offset & 0x80)
-                ? offset - 0x100
-                : offset;
-
-        this.PC = (this.PC + signedOffset) & 0x1FFF;
-
-        let cycles = 3;
-
-        if ((oldPC & 0x1F00) !== (this.PC & 0x1F00)) {
-            cycles++;
-        }
-
-        this.tick(cycles);
+    if (!condition) {
+        return 2;
     }
 
+    const oldPC = this.PC;
+
+    const signedOffset =
+        (offset & 0x80)
+            ? offset - 0x100
+            : offset;
+
+    this.PC = (this.PC + signedOffset) & 0x1FFF;
+
+    let cycles = 3;
+
+    if ((oldPC & 0x1F00) !== (this.PC & 0x1F00)) {
+        cycles++;
+    }
+
+    return cycles;
+}
     /* =========================================================
        JMP INDIRECT
        ========================================================= */
@@ -2482,37 +2480,29 @@ if (op === "ISC") {
                Branches
                ------------------------------------------------- */
 
-            case "BCC":
-                this.branch(!this.getFlag(this.FLAG_C));
-                return 0;
+             case "BCC":
+                return this.branch(!this.getFlag(this.FLAG_C));
 
             case "BCS":
-                this.branch(this.getFlag(this.FLAG_C));
-                return 0;
+                return this.branch(this.getFlag(this.FLAG_C));
 
             case "BEQ":
-                this.branch(this.getFlag(this.FLAG_Z));
-                return 0;
+                return this.branch(this.getFlag(this.FLAG_Z));
 
             case "BMI":
-                this.branch(this.getFlag(this.FLAG_N));
-                return 0;
+                return this.branch(this.getFlag(this.FLAG_N));
 
             case "BNE":
-                this.branch(!this.getFlag(this.FLAG_Z));
-                return 0;
+                return this.branch(!this.getFlag(this.FLAG_Z));
 
             case "BPL":
-                this.branch(!this.getFlag(this.FLAG_N));
-                return 0;
+                return this.branch(!this.getFlag(this.FLAG_N));
 
             case "BVC":
-                this.branch(!this.getFlag(this.FLAG_V));
-                return 0;
+                return this.branch(!this.getFlag(this.FLAG_V));
 
             case "BVS":
-                this.branch(this.getFlag(this.FLAG_V));
-                return 0;
+                return this.branch(this.getFlag(this.FLAG_V));
 
             /* -------------------------------------------------
                NOP
