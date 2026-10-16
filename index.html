@@ -2068,6 +2068,7 @@ class CPU6507 {
           
           /* ISC / ISB - undocumented 6502 instruction */
           this.define(0xFF, "ISC", "absx", 7);
+          this.define(0xFB, "ISC", "absy", 7);
 
         /* SEC / SED / SEI */
         this.define(0x38, "SEC", "imp", 2);
