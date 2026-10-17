@@ -2066,9 +2066,25 @@ class CPU6507 {
             [0xF1, "izy", 5, true]
         ]);
           
-          /* ISC / ISB - undocumented 6502 instruction */
-          this.define(0xFF, "ISC", "absx", 7);
-          this.define(0xFB, "ISC", "absy", 7);
+           /* ISC / ISB — undocumented 6502 instruction */
+        this.defineMany("ISC", [
+            [0xE3, "izx", 8],
+            [0xE7, "zp", 5],
+            [0xEF, "abs", 6],
+            [0xF3, "izy", 8],
+            [0xF7, "zpx", 6],
+            [0xFB, "absy", 7],
+            [0xFF, "absx", 7]
+        ]);
+
+        /* KIL / JAM — CPU halt instructions */
+        for (const opcode of [
+            0x02, 0x12, 0x22, 0x32,
+            0x42, 0x52, 0x62, 0x72,
+            0x92, 0xB2, 0xD2, 0xF2
+        ]) {
+            this.define(opcode, "KIL", "imp", 2);
+        }
 
         /* SEC / SED / SEI */
         this.define(0x38, "SEC", "imp", 2);
@@ -2503,7 +2519,9 @@ if (op === "ISC") {
 
             case "BVS":
                 return this.branch(this.getFlag(this.FLAG_V));
-
+            case "KIL":
+                this.halted = true;
+                return instruction.cycles;
             /* -------------------------------------------------
                NOP
                ------------------------------------------------- */
