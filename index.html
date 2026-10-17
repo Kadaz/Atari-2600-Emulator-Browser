@@ -1192,6 +1192,9 @@ class TIA {
 
                 if (this.scanline >= 262) {
                     this.scanline = 0;
+                }
+
+                if (this.scanline === 232) {
                     this.present();
                 }
 
