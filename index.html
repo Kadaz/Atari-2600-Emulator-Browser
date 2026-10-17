@@ -3168,6 +3168,25 @@ document
 ========================================================= */
 
 function frameLoop(timestamp) {
+    if (!emulator.lastFrameTime) {
+        emulator.lastFrameTime = timestamp;
+    }
+
+    if (emulator.bus.cartridge.rom && !emulator.cpu.halted) {
+        try {
+            emulator.runFrame();
+        } catch (error) {
+            console.error("Atari 2600 emulator error:", error);
+
+            emulator.cpu.halted = true;
+
+            document.getElementById("status").textContent =
+                "EMULATOR ERROR: " + error.message;
+        }
+    }
+
+    requestAnimationFrame(frameLoop);
+}
 
     if (!emulator.lastFrameTime) {
         emulator.lastFrameTime =
