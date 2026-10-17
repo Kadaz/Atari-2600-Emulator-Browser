@@ -1191,12 +1191,9 @@ class TIA {
                 this.scanline++;
 
                 if (this.scanline >= 262) {
-                    this.scanline = 0;
-                }
-
-                if (this.scanline === 232) {
-                    this.present();
-                }
+    this.scanline = 0;
+    this.present();
+}
 
                 this.wsync = false;
             }
