@@ -3170,6 +3170,7 @@ document
    MAIN LOOP
 ========================================================= */
 
+
 function frameLoop(timestamp) {
     if (!emulator.lastFrameTime) {
         emulator.lastFrameTime = timestamp;
@@ -3180,9 +3181,7 @@ function frameLoop(timestamp) {
             emulator.runFrame();
         } catch (error) {
             console.error("Atari 2600 emulator error:", error);
-
             emulator.cpu.halted = true;
-
             document.getElementById("status").textContent =
                 "EMULATOR ERROR: " + error.message;
         }
@@ -3190,26 +3189,6 @@ function frameLoop(timestamp) {
 
     requestAnimationFrame(frameLoop);
 }
-
-    if (!emulator.lastFrameTime) {
-        emulator.lastFrameTime =
-            timestamp;
-    }
-
-    /*
-     * Keep this deliberately conservative
-     * until the real TIA frame scheduler exists.
-     */
-    if (emulator.bus.cartridge.rom &&
-        !emulator.cpu.halted) {
-
-        emulator.runFrame();
-    }
-
-    requestAnimationFrame(frameLoop);
-}
-
-
 /* =========================================================
    START
 ========================================================= */
