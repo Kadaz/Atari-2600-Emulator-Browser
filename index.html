@@ -1167,6 +1167,13 @@ class TIA {
 
             case 0x02:
                 this.wsync = true;
+                    case 0x10:
+                this.playerPositions[0] = this.colorClock - 68;
+                break;
+
+            case 0x11:
+                this.playerPositions[1] = this.colorClock - 68;
+                break;
                 break;
         }
     }
