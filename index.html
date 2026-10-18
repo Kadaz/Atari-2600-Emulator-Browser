@@ -971,6 +971,7 @@ class TIA {
         this.vsync = false;
         this.vblank = false;
         this.wsync = false;
+        this.playerPositions = [-100, -100];
 
         this.canvas = document.getElementById("screen");
         this.canvas.width = this.width;
@@ -996,6 +997,7 @@ class TIA {
         this.vsync = false;
         this.vblank = false;
         this.wsync = false;
+        this.playerPositions = [-100, -100];
 
         this.clearFrame();
         this.present();
