@@ -1093,7 +1093,20 @@ class TIA {
 
         return bit;
     }
+playerPixel(player, x) {
+        const position = this.playerPositions[player];
+        const graphics = this.registers[player === 0 ? 0x1B : 0x1C];
 
+        const spriteX = x - position;
+
+        if (spriteX < 0 || spriteX >= 8) {
+            return false;
+        }
+
+        const bit = (graphics >> (7 - spriteX)) & 1;
+
+        return bit !== 0;
+    }
     drawPixel(x, y) {
         if (x < 0 || x >= this.width ||
             y < 0 || y >= this.height) {
