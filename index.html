@@ -1123,10 +1123,15 @@ playerPixel(player, x) {
             return;
         }
 
-        const playfield = this.playfieldPixel(x);
-        const colorCode = playfield
+        let colorCode = playfield
             ? this.registers[0x08]
             : this.registers[0x09];
+
+        if (this.playerPixel(0, x)) {
+            colorCode = this.registers[0x06];
+        } else if (this.playerPixel(1, x)) {
+            colorCode = this.registers[0x07];
+        }
 
         const rgb = this.colorToRGB(colorCode);
 
