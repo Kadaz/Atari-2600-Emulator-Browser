@@ -1005,7 +1005,7 @@ class TIA {
         this.vsync = false;
         this.vblank = false;
         this.wsync = false;
-        this.wsync = false;  
+        this.fireButtons = [false, false];  
 
         this.playerPositions = [-100, -100];
         this.missilePositions = [-100, -100];
@@ -1238,35 +1238,36 @@ class TIA {
         this.framebuffer[index + 3] = 255;
     }
 
+    
     read(address) {
         address &= 0x3F;
 
+        // Collision registers CXM0P through CXBLPF.
+        // Collision detection is not implemented yet.
         switch (address) {
-            // Collision registers: προσωρινά δεν έχουν
-            // υλοποιηθεί οι πραγματικές συγκρούσεις.
-            case 0x30:
-            case 0x31:
-            case 0x32:
-            case 0x33:
-            case 0x34:
-            case 0x35:
-            case 0x36:
-            case 0x37:
+            case 0x00:
+            case 0x01:
+            case 0x02:
+            case 0x03:
+            case 0x04:
+            case 0x05:
+            case 0x06:
+            case 0x07:
                 return 0x00;
 
-            // INPT0-INPT3: είσοδοι paddles.
-            case 0x38:
-            case 0x39:
-            case 0x3A:
-            case 0x3B:
+            // INPT0-INPT3: paddle inputs.
+            case 0x08:
+            case 0x09:
+            case 0x0A:
+            case 0x0B:
                 return 0x80;
 
-            // INPT4: FIRE του παίκτη 0.
-            case 0x3C:
+            // INPT4: player 0 FIRE.
+            case 0x0C:
                 return this.fireButtons[0] ? 0x00 : 0x80;
 
-            // INPT5: FIRE του παίκτη 1.
-            case 0x3D:
+            // INPT5: player 1 FIRE.
+            case 0x0D:
                 return this.fireButtons[1] ? 0x00 : 0x80;
 
             default:
