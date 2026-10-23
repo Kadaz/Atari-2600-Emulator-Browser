@@ -1449,14 +1449,33 @@ class AtariBus {
     }
 
     tick(cpuCycles) {
+    cpuCycles = cpuCycles | 0;
 
-        /*
-         * One CPU cycle = three TIA color clocks.
-         */
-        this.tia.tickColorClocks(cpuCycles * 3);
-
-        this.riot.tick(cpuCycles);
+    if (cpuCycles <= 0) {
+        return;
     }
+
+    // Advance the TIA for the instruction's CPU cycles.
+    this.tia.tickColorClocks(cpuCycles * 3);
+
+    let totalCycles = cpuCycles;
+
+    // WSYNC stalls the CPU until the next scanline.
+    if (this.tia.wsync) {
+        const remainingColorClocks = 228 - this.tia.colorClock;
+        const stallCycles = Math.ceil(remainingColorClocks / 3);
+
+        if (stallCycles > 0) {
+            this.tia.tickColorClocks(stallCycles * 3);
+            totalCycles += stallCycles;
+        }
+
+        this.tia.wsync = false;
+    }
+
+    // The RIOT timer also advances during the WSYNC stall.
+    this.riot.tick(totalCycles);
+}
 }
 
 
