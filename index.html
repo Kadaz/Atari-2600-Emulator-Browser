@@ -971,6 +971,7 @@ class TIA {
         this.vsync = false;
         this.vblank = false;
         this.wsync = false;
+        this.fireButtons = [false, false];  
 
         this.playerPositions = [-100, -100];
         this.missilePositions = [-100, -100];
@@ -1004,6 +1005,7 @@ class TIA {
         this.vsync = false;
         this.vblank = false;
         this.wsync = false;
+        this.wsync = false;  
 
         this.playerPositions = [-100, -100];
         this.missilePositions = [-100, -100];
@@ -1240,6 +1242,8 @@ class TIA {
         address &= 0x3F;
 
         switch (address) {
+            // Collision registers: προσωρινά δεν έχουν
+            // υλοποιηθεί οι πραγματικές συγκρούσεις.
             case 0x30:
             case 0x31:
             case 0x32:
@@ -1250,13 +1254,20 @@ class TIA {
             case 0x37:
                 return 0x00;
 
+            // INPT0-INPT3: είσοδοι paddles.
             case 0x38:
             case 0x39:
             case 0x3A:
             case 0x3B:
-            case 0x3C:
-            case 0x3D:
                 return 0x80;
+
+            // INPT4: FIRE του παίκτη 0.
+            case 0x3C:
+                return this.fireButtons[0] ? 0x00 : 0x80;
+
+            // INPT5: FIRE του παίκτη 1.
+            case 0x3D:
+                return this.fireButtons[1] ? 0x00 : 0x80;
 
             default:
                 return 0x00;
@@ -1383,6 +1394,20 @@ class AtariBus {
 
         this.riot.reset();
         this.tia.reset();
+    }
+      syncControllerInputs() {
+        const controller = this.controller;
+
+        // Κατευθύνσεις παίκτη 0 μέσω του RIOT SWCHA.
+        this.riot.setPlayer0Joystick(
+            controller.up,
+            controller.down,
+            controller.left,
+            controller.right
+        );
+
+        // Κουμπί FIRE μέσω της εισόδου TIA INPT4.
+        this.tia.fireButtons[0] = controller.fire;
     }
 
     read(address) {
@@ -2980,7 +3005,7 @@ class Atari2600 {
     if (!this.bus.cartridge.rom) {
         return;
     }
-
+    this.bus.syncControllerInputs();
     const target = cpuCyclesPerScanline() * 262;
     let executed = 0;
 
