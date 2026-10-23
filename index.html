@@ -1122,6 +1122,7 @@ playerPixel(player, x) {
             this.framebuffer[index + 3] = 255;
             return;
         }
+          const playfield = this.playfieldPixel(x);
 
         let colorCode = playfield
             ? this.registers[0x08]
