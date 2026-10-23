@@ -1071,40 +1071,37 @@ class TIA {
         ];
     }
 
-    playfieldPixel(x) {
-        const pf0 = this.registers[0x0D];
-        const pf1 = this.registers[0x0E];
-        const pf2 = this.registers[0x0F];
-        const control = this.registers[0x0A];
+   playfieldPixel(x) {
+    const pf0 = this.registers[0x0D];
+    const pf1 = this.registers[0x0E];
+    const pf2 = this.registers[0x0F];
+    const control = this.registers[0x0A];
 
-        let bit = 0;
+    // The left half always uses PF0, PF1 and PF2.
+    let sourceX;
 
-        if (x < 16) {
-            bit = (pf0 >> (4 + Math.floor(x / 4))) & 1;
-        } else if (x < 48) {
-            bit = (pf1 >> (7 - Math.floor((x - 16) / 4))) & 1;
-        } else if (x < 80) {
-            bit = (pf2 >> Math.floor((x - 48) / 4)) & 1;
-        } else {
-            let sourceX;
-
-            if (control & 0x01) {
-                sourceX = x - 80;
-            } else {
-                sourceX = 159 - x;
-            }
-
-            if (sourceX < 16) {
-                bit = (pf0 >> (4 + Math.floor(sourceX / 4))) & 1;
-            } else if (sourceX < 48) {
-                bit = (pf1 >> (7 - Math.floor((sourceX - 16) / 4))) & 1;
-            } else {
-                bit = (pf2 >> Math.floor((sourceX - 48) / 4)) & 1;
-            }
-        }
-
-        return bit;
+    if (x < 80) {
+        sourceX = x;
+    } else {
+        // CTRLPF bit 0: 1 = reflect the right half.
+        sourceX = (control & 0x01) ? 159 - x : x - 80;
     }
+
+    let bit;
+
+    if (sourceX < 16) {
+        // PF0 uses its upper four bits.
+        bit = (pf0 >> (4 + Math.floor(sourceX / 4))) & 1;
+    } else if (sourceX < 48) {
+        // PF1 is displayed from bit 7 down to bit 0.
+        bit = (pf1 >> (7 - Math.floor((sourceX - 16) / 4))) & 1;
+    } else {
+        // PF2 is displayed from bit 0 up to bit 7.
+        bit = (pf2 >> Math.floor((sourceX - 48) / 4)) & 1;
+    }
+
+    return bit;
+}
 
     playerPixel(player, x) {
         const nusiz = this.registers[player === 0 ? 0x04 : 0x05];
