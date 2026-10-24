@@ -2269,6 +2269,109 @@ class CPU6507 {
             [0xFB, "absy", 7],
             [0xFF, "absx", 7]
         ]);
+          /* Other stable undocumented NMOS 6502 instructions */
+
+        this.defineMany("SLO", [
+            [0x03, "izx", 8],
+            [0x07, "zp", 5],
+            [0x0F, "abs", 6],
+            [0x13, "izy", 8],
+            [0x17, "zpx", 6],
+            [0x1B, "absy", 7],
+            [0x1F, "absx", 7]
+        ]);
+
+        this.defineMany("RLA", [
+            [0x23, "izx", 8],
+            [0x27, "zp", 5],
+            [0x2F, "abs", 6],
+            [0x33, "izy", 8],
+            [0x37, "zpx", 6],
+            [0x3B, "absy", 7],
+            [0x3F, "absx", 7]
+        ]);
+
+        this.defineMany("SRE", [
+            [0x43, "izx", 8],
+            [0x47, "zp", 5],
+            [0x4F, "abs", 6],
+            [0x53, "izy", 8],
+            [0x57, "zpx", 6],
+            [0x5B, "absy", 7],
+            [0x5F, "absx", 7]
+        ]);
+
+        this.defineMany("RRA", [
+            [0x63, "izx", 8],
+            [0x67, "zp", 5],
+            [0x6F, "abs", 6],
+            [0x73, "izy", 8],
+            [0x77, "zpx", 6],
+            [0x7B, "absy", 7],
+            [0x7F, "absx", 7]
+        ]);
+
+        this.defineMany("SAX", [
+            [0x83, "izx", 6],
+            [0x87, "zp", 3],
+            [0x8F, "abs", 4],
+            [0x97, "zpy", 4]
+        ]);
+
+        this.defineMany("LAX", [
+            [0xA3, "izx", 6],
+            [0xA7, "zp", 3],
+            [0xAF, "abs", 4],
+            [0xB3, "izy", 5, true],
+            [0xB7, "zpy", 4],
+            [0xBF, "absy", 4, true]
+        ]);
+
+        this.defineMany("DCP", [
+            [0xC3, "izx", 8],
+            [0xC7, "zp", 5],
+            [0xCF, "abs", 6],
+            [0xD3, "izy", 8],
+            [0xD7, "zpx", 6],
+            [0xDB, "absy", 7],
+            [0xDF, "absx", 7]
+        ]);
+
+          /* Undocumented NOP variants */
+
+        this.defineMany("NOP", [
+            [0x04, "zp", 3],
+            [0x0C, "abs", 4],
+            [0x14, "zpx", 4],
+            [0x1A, "imp", 2],
+            [0x1C, "absx", 4, true],
+            [0x34, "zpx", 4],
+            [0x3A, "imp", 2],
+            [0x3C, "absx", 4, true],
+            [0x44, "zp", 3],
+            [0x54, "zpx", 4],
+            [0x5A, "imp", 2],
+            [0x5C, "absx", 4, true],
+            [0x64, "zp", 3],
+            [0x74, "zpx", 4],
+            [0x7A, "imp", 2],
+            [0x7C, "absx", 4, true],
+            [0x80, "imm", 2],
+            [0x82, "imm", 2],
+            [0x89, "imm", 2],
+            [0xC2, "imm", 2],
+            [0xD4, "zpx", 4],
+            [0xDA, "imp", 2],
+            [0xDC, "absx", 4, true],
+            [0xE2, "imm", 2],
+            [0xF4, "zpx", 4],
+            [0xFA, "imp", 2],
+            [0xFC, "absx", 4, true]
+        ]);
+
+        /* Undocumented SBC immediate alias */
+        this.define(0xEB, "SBC", "imm", 2);
+          
 
         /* KIL / JAM — CPU halt instructions */
         for (const opcode of [
@@ -2467,6 +2570,74 @@ if (op === "ISC") {
     return instruction.cycles;
 }
 
+          /* Stable undocumented NMOS 6502 instructions */
+
+        if (op === "LAX") {
+            const operand = this.readOperand(mode);
+            this.A = operand.value & 0xFF;
+            this.X = this.A;
+            this.setZN(this.A);
+
+            return instruction.cycles +
+                (instruction.pagePenalty && operand.pageCrossed ? 1 : 0);
+        }
+
+        if (op === "SAX") {
+            const address = this.getAddress(mode);
+            this.write(address, this.A & this.X);
+            return instruction.cycles;
+        }
+
+        if (op === "DCP") {
+            const address = this.getAddress(mode);
+            const value = (this.read(address) - 1) & 0xFF;
+
+            this.write(address, value);
+            this.compare(this.A, value);
+
+            return instruction.cycles;
+        }
+
+        if (
+            op === "SLO" ||
+            op === "RLA" ||
+            op === "SRE" ||
+            op === "RRA"
+        ) {
+            const address = this.getAddress(mode);
+            const oldValue = this.read(address);
+
+            let newValue;
+
+            if (op === "SLO") {
+                newValue = this.shiftValue("ASL", oldValue);
+            } else if (op === "RLA") {
+                newValue = this.shiftValue("ROL", oldValue);
+            } else if (op === "SRE") {
+                newValue = this.shiftValue("LSR", oldValue);
+            } else {
+                newValue = this.shiftValue("ROR", oldValue);
+            }
+
+            this.write(address, newValue);
+
+            if (op === "SLO") {
+                this.A = (this.A | newValue) & 0xFF;
+                this.setZN(this.A);
+            } else if (op === "RLA") {
+                this.A = (this.A & newValue) & 0xFF;
+                this.setZN(this.A);
+            } else if (op === "SRE") {
+                this.A = (this.A ^ newValue) & 0xFF;
+                this.setZN(this.A);
+            } else {
+                // ROR supplies the carry consumed by ADC.
+                this.adc(newValue);
+            }
+
+            return instruction.cycles;
+        }
+          
         /* -----------------------------------------------------
            Stores
            ----------------------------------------------------- */
@@ -2719,8 +2890,16 @@ if (op === "ISC") {
                NOP
                ------------------------------------------------- */
 
-            case "NOP":
+            case "NOP": {
+                if (mode !== "imp" && mode !== "acc") {
+                    const operand = this.readOperand(mode);
+
+                    return instruction.cycles +
+                        (instruction.pagePenalty && operand.pageCrossed ? 1 : 0);
+                }
+
                 return instruction.cycles;
+            }
 
             default:
                 throw new Error(
