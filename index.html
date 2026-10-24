@@ -849,22 +849,14 @@ class Riot {
        ========================================================= */
 
     loadTimer(value, interval) {
-        /*
-         * The RIOT timer receives an 8-bit value.
-         *
-         * 0 is treated as 256 intervals by the hardware.
-         */
         this.timerValue = value & 0xFF;
-
         this.timerInterval = interval;
         this.timerCycles = interval;
 
-        this.timerZeroHold = false;
+        // If zero is loaded, the next timer interval
+        // transitions directly into the underflow phase.
+        this.timerZeroHold = (this.timerValue === 0);
         this.timerExpired = false;
-    }
-
-    readTimer() {
-        return this.timerValue & 0xFF;
     }
 
     /* =========================================================
