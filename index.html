@@ -2269,6 +2269,11 @@ class CPU6507 {
             [0xFB, "absy", 7],
             [0xFF, "absx", 7]
         ]);
+
+          /* ANC — undocumented NMOS 6502 instruction */
+        this.define(0x0B, "ANC", "imm", 2);
+        this.define(0x2B, "ANC", "imm", 2);
+          
           /* Other stable undocumented NMOS 6502 instructions */
 
         this.defineMany("SLO", [
@@ -2634,6 +2639,17 @@ if (op === "ISC") {
                 // ROR supplies the carry consumed by ADC.
                 this.adc(newValue);
             }
+
+            return instruction.cycles;
+        }
+
+          /* ANC — undocumented NMOS 6502 instruction */
+        if (op === "ANC") {
+            const operand = this.readOperand(mode);
+
+            this.A = (this.A & operand.value) & 0xFF;
+            this.setZN(this.A);
+            this.setFlag(this.FLAG_C, (this.A & 0x80) !== 0);
 
             return instruction.cycles;
         }
