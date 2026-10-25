@@ -62,6 +62,13 @@
             box-shadow: 0 10px 25px rgba(0,0,0,0.5);
             overflow: hidden;
             margin-bottom: 20px;
+            width: 640px;
+            height: 480px;
+        }
+
+        #javatari-screen {
+            width: 100%;
+            height: 100%;
         }
 
         /* Virtual Controls */
@@ -92,6 +99,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            cursor: pointer;
         }
 
         .dpad-btn:active {
@@ -118,6 +126,7 @@
             align-items: center;
             justify-content: center;
             font-size: 16px;
+            cursor: pointer;
         }
 
         .fire-btn:active {
@@ -132,7 +141,7 @@
             text-align: center;
         }
     </style>
-    <!-- Φόρτωση βιβλιοθήκης Javatari -->
+    <!-- Καθαρό script εγγυημένης έκδοσης Javatari -->
     <script src="https://javatari.org"></script>
 </head>
 <body>
@@ -140,7 +149,6 @@
     <h1>Atari 2600 Emulator</h1>
 
     <div class="controls-panel">
-        <!-- Δυναμική Λίστα από το index.json -->
         <div>
             <label for="local-roms">Παιχνίδια Φακέλου: </label>
             <select id="local-roms" onchange="loadProjectROM(this.value)">
@@ -148,7 +156,6 @@
             </select>
         </div>
 
-        <!-- Επιλογή ROM από το PC -->
         <div>
             <label for="file-input">Από PC: </label>
             <input type="file" id="file-input" accept=".bin,.rom,.a26" onchange="loadPCROM(this)">
@@ -161,7 +168,6 @@
         <div id="javatari-screen"></div>
     </div>
 
-    <!-- Εικονικά Κουμπιά -->
     <div class="virtual-controls">
         <div class="dpad">
             <div></div>
@@ -180,27 +186,26 @@
     </div>
 
     <div class="info">
-        <p>⌨️ <b>Πληκτρολόγιο:</b> Βελάκια = Κίνηση | Space / Z = FIRE | F1 = Reset</p>
-        <p>🎮 <b>Χειριστήριο:</b> Συνδέστε Gamepad και πατήστε ένα κουμπί για ενεργοποίηση.</p>
+        <p>⌨️ <b>Πληκτρολόγιο:</b> Βελάκια = Κίνηση | Space / Z = FIRE</p>
+        <p>🎮 <b>Χειριστήριο:</b> Συνδέστε Gamepad και πατήστε ένα κουμπί.</p>
     </div>
 
     <script>
-        // Ρυθμίσεις Javatari
+        // Σωστή αρχικοποίηση Javatari 
         window.Javatari = window.Javatari || {};
         Javatari.ROOM = "javatari-screen";
         Javatari.AUTO_START = true;
 
-        // Δυναμικό διάβασμα του roms/index.json κατά την εκκίνηση
+        // Διάβασμα του αρχείου roms/index.json
         document.addEventListener("DOMContentLoaded", () => {
             fetch("roms/index.json")
                 .then(res => {
-                    if (!res.ok) throw new Error("Δεν βρέθηκε το αρχείο roms/index.json");
+                    if (!res.ok) throw new Error();
                     return res.json();
                 })
                 .then(data => {
                     const dropdown = document.getElementById("local-roms");
                     dropdown.innerHTML = '<option value="">-- Επιλέξτε Παιχνίδι --</option>';
-                    
                     data.forEach(rom => {
                         const option = document.createElement("option");
                         option.value = `roms/${rom.file}`;
@@ -208,42 +213,68 @@
                         dropdown.appendChild(option);
                     });
                 })
-                .catch(err => {
-                    console.error(err);
-                    const dropdown = document.getElementById("local-roms");
-                    dropdown.innerHTML = '<option value="">Σφάλμα φόρτωσης JSON</option>';
+                .catch(() => {
+                    document.getElementById("local-roms").innerHTML = '<option value="">Σφάλμα index.json / CORS</option>';
                 });
         });
 
-        // Φόρτωση ROM από τον φάκελο του Project
+        // ΣΩΣΤΟΣ ΤΡΟΠΟΣ ΦΟΡΤΩΣΗΣ ROM ΣΤΟ JAVATARI
+        function startRomWithJavatari(fileName, arrayBuffer) {
+            try {
+                // Μετατροπή σε κατάλληλο binary string που απαιτεί το API του Javatari
+                let binary = "";
+                const bytes = new Uint8Array(arrayBuffer);
+                const len = bytes.byteLength;
+                for (let i = 0; i < len; i++) {
+                    binary += String.fromCharCode(bytes[i]);
+                }
+                
+                // Κλήση του εσωτερικού parser του Javatari
+                if (window.Javatari && typeof Javatari.loadRom === "function") {
+                    Javatari.loadRom(fileName, binary);
+                } else {
+                    alert("Ο εξομοιωτής Javatari δεν έχει φορτωθεί σωστά.");
+                }
+            } catch (e) {
+                console.error(e);
+                alert("Σφάλμα κατά την εκκίνηση του παιχνιδιού.");
+            }
+        }
+
+        // Φόρτωση από τον φάκελο του Project
         function loadProjectROM(path) {
             if (!path) return;
+            const fileName = path.split('/').pop();
             fetch(path)
                 .then(res => {
-                    if (!res.ok) throw new Error("Το αρχείο ROM δεν βρέθηκε στον κατάλογο /roms/");
+                    if (!res.ok) throw new Error("Το αρχείο ROM λείπει από τον φάκελο /roms/");
                     return res.arrayBuffer();
                 })
                 .then(buffer => {
-                    Javatari.loadRom(new Uint8Array(buffer));
+                    startRomWithJavatari(fileName, buffer);
                 })
                 .catch(err => alert(err.message));
         }
 
-        // Φόρτωση ROM από το PC
+        // Φόρτωση αρχείου από το PC
         function loadPCROM(input) {
-            const file = input.files[0];
-            if (!file) return;
+            const files = input.files;
+            if (!files || files.length === 0) return;
             
+            const file = files[0];
             const reader = new FileReader();
             reader.onload = function(e) {
-                const buffer = new Uint8Array(e.target.result);
-                Javatari.loadRom(buffer);
+                startRomWithJavatari(file.name, e.target.result);
             };
             reader.readAsArrayBuffer(file);
         }
 
         function resetEmulator() {
-            if (typeof Javatari.reset === "function") Javatari.reset();
+            // Προσομοίωση πατήματος του F1 Console Reset
+            if (window.Javatari && typeof Javatari.keyDown === "function") {
+                Javatari.keyDown(112); // F1 down
+                setTimeout(() => Javatari.keyUp(112), 100); // F1 up
+            }
         }
 
         // --- ΕΙΚΟΝΙΚΑ ΚΟΥΜΠΙΑ ---
@@ -253,12 +284,12 @@
 
             const startPress = (e) => {
                 e.preventDefault();
-                Javatari.keyDown(keyCode);
+                if(window.Javatari && Javatari.keyDown) Javatari.keyDown(keyCode);
             };
 
             const endPress = (e) => {
                 e.preventDefault();
-                Javatari.keyUp(keyCode);
+                if(window.Javatari && Javatari.keyUp) Javatari.keyUp(keyCode);
             };
 
             btn.addEventListener('mousedown', startPress);
@@ -267,46 +298,12 @@
             btn.addEventListener('touchend', endPress);
         }
 
+        // KeyCodes: 38=Up, 40=Down, 37=Left, 39=Right, 32=Space (Fire)
         setupVirtualButton('btn-up', 38);
         setupVirtualButton('btn-down', 40);
         setupVirtualButton('btn-left', 37);
         setupVirtualButton('btn-right', 39);
-        setupVirtualButton('btn-fire', 90);
+        setupVirtualButton('btn-fire', 32);
 
-        // --- ΥΠΟΣΤΗΡΙΞΗ ΧΕΙΡΙΣΤΗΡΙΟΥ (GAMEPAD) ---
+        // --- ΧΕΙΡΙΣΤΗΡΙΟ (GAMEPAD) ---
         let gamepadIndex = null;
-        const buttonState = { up: false, down: false, left: false, right: false, fire: false };
-
-        window.addEventListener("gamepadconnected", (e) => {
-            gamepadIndex = e.gamepad.index;
-            startGamepadLoop();
-        });
-
-        window.addEventListener("gamepaddisconnected", () => {
-            gamepadIndex = null;
-        });
-
-        function updateGamepadState() {
-            if (gamepadIndex === null) return;
-            const gp = navigator.getGamepads()[gamepadIndex];
-            if (!gp) return;
-
-            const axeX = gp.axes[0];
-            const axeY = gp.axes[1];
-            
-            const up = axeY < -0.5 || gp.buttons[12]?.pressed;
-            const down = axeY > 0.5 || gp.buttons[13]?.pressed;
-            const left = axeX < -0.5 || gp.buttons[14]?.pressed;
-            const right = axeX > 0.5 || gp.buttons[15]?.pressed;
-            const fire = gp.buttons[0]?.pressed || gp.buttons[1]?.pressed; 
-
-            handleGamepadKey(up, 'up', 38);
-            handleGamepadKey(down, 'down', 40);
-            handleGamepadKey(left, 'left', 37);
-            handleGamepadKey(right, 'right', 39);
-            handleGamepadKey(fire, 'fire', 90);
-
-            requestAnimationFrame(updateGamepadState);
-        }
-
-        function handleGamepadKey(isPressed, stateName, keyCode) {
