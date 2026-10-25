@@ -1,161 +1,294 @@
+
 <!DOCTYPE html>
-<html lang="en">
+<html lang="el">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-
-<title>Retro Land - Atari 2600 (100% Fixed)</title>
-
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Retro Land — Atari 2600</title>
 <style>
-* {
-    box-sizing: border-box;
-    -webkit-tap-highlight-color: transparent;
-}
-
-html, body {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    min-height: 100%;
-    background: #050505;
-    color: #f0f0f0;
-    font-family: Arial, Helvetica, sans-serif;
-    overflow-x: hidden;
-}
-
-body {
-    display: flex;
-    justify-content: center;
-}
-
-#app {
-    width: 100%;
-    max-width: 1000px;
-    padding: 16px;
-}
-
-h1 {
-    margin: 0 0 6px 0;
-    font-size: 24px;
-    text-align: center;
-}
-
-.subtitle {
-    margin-bottom: 16px;
-    color: #aaa;
-    font-size: 13px;
-    text-align: center;
-}
-
-.panel {
-    background: #111;
-    border: 1px solid #333;
-    border-radius: 10px;
-    padding: 14px;
-    margin-bottom: 12px;
-}
-
-#fileInput {
-    width: 100%;
-    max-width: 500px;
-    display: block;
-    margin: 0 auto;
-}
-
-#status {
-    margin-top: 10px;
-    color: #ffcc00;
-    font-size: 13px;
-    text-align: center;
-    font-weight: bold;
-}
-
-/* Το πλαίσιο που θα μπει ο πραγματικός εξομοιωτής */
-#atari-screen-fixed {
-    display: block;
-    width: 100%;
-    max-width: 640px;
-    margin: 0 auto;
-    background: #000;
-}
-
-.small {
-    font-size: 12px;
-    color: #888;
-    margin-top: 10px;
-    text-align: center;
-}
+*{box-sizing:border-box}
+html,body{margin:0;background:#080808;color:#eee;font-family:Arial,sans-serif}
+body{padding:12px;max-width:1000px;margin:auto}
+h1{font-size:23px}
+.panel{background:#151515;border:1px solid #383838;border-radius:10px;padding:12px;margin:12px 0}
+button,input,select{font:inherit;background:#222;color:#fff;border:1px solid #555;border-radius:6px;padding:10px;max-width:100%}
+button{cursor:pointer}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+#status{font-size:13px;color:#ffd166;margin-top:10px;white-space:pre-wrap}
+canvas{display:block;width:100%;height:auto;image-rendering:pixelated;background:#000;border:2px solid #444}
+.controls{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:420px;margin:auto}
+.controls button{height:54px;touch-action:none;user-select:none}
+.empty{visibility:hidden}
+small{color:#aaa}
 </style>
-
-<!-- Φορτώνουμε τον επίσημο, πλήρη εξομοιωτή Javatari από έμπιστο αποθετήριο -->
-<script src="https://jsdelivr.net"></script>
 </head>
-
 <body>
+<h1>Retro Land — Atari 2600</h1>
 
-<div id="app">
+<div class="panel">
+<div class="row">
+<input id="rom" type="file" accept=".bin,.a26,.rom">
+<button id="reset">RESET</button>
+</div>
+<div id="status">Επίλεξε ROM Atari 2600 2 KB ή 4 KB.</div>
+</div>
 
-    <h1>Retro Land - Atari 2600</h1>
-    <div class="subtitle">
-        Atari 2600 Browser Emulator (Full Hardware Emulation)
-    </div>
+<div class="panel">
+<canvas id="screen" width="160" height="192"></canvas>
+<small>Απόδοση βίντεο TIA σε βασικό επίπεδο· δεν εγγυάται συμβατότητα με όλα τα παιχνίδια.</small>
+</div>
 
-    <div class="panel">
-        <input id="fileInput" type="file" accept=".bin,.a26,.rom">
-        <div id="status">Παρακαλώ επιλέξτε το αρχείο Othello (.bin)</div>
-    </div>
-
-    <div class="panel">
-        <!-- Εδώ θα εμφανιστεί το αληθινό Atari με όλα τα γραφικά του -->
-        <div id="atari-screen-fixed"></div>
-        <div class="small">
-            Υποστηρίζεται πλήρης εξομοίωση CPU (6507) και Γραφικών (TIA).
-        </div>
-    </div>
-
-    <div class="panel" style="text-align: center; font-size: 14px; color: #bbb;">
-        <strong>Χειρισμός:</strong> Βέλη = Κίνηση | Space = Κουμπί Fire | <strong>F2 = RESET (Αν κολλήσει η μαύρη οθόνη στην αρχή)</strong>
-    </div>
-
+<div class="panel">
+<div class="controls">
+<button class="empty"></button><button data-key="up">▲</button><button class="empty"></button>
+<button data-key="left">◀</button><button data-key="fire">FIRE</button><button data-key="right">▶</button>
+<button class="empty"></button><button data-key="down">▼</button><button class="empty"></button>
+</div>
+<p><small>Πληκτρολόγιο: βελάκια = joystick, Space = fire, R = reset.</small></p>
 </div>
 
 <script>
 "use strict";
 
-// Αρχικοποίηση του Javatari μόλις ανοίξει η σελίδα
-window.addEventListener("load", function() {
-    if (typeof Javatari !== 'undefined') {
-        Javatari.initialize("atari-screen-fixed");
-    } else {
-        document.getElementById('status').innerText = "Σφάλμα: Δεν μπορέσε να φορτώσει ο πυρήνας του εξομοιωτή.";
-    }
+/*
+ Atari 2600 — standalone HTML/JavaScript emulator core.
+ Supports standard 2 KB and 4 KB cartridges and the official
+ NMOS 6502 instruction set plus common stable undocumented
+ instructions. TIA output is simplified and is not cycle-exact.
+*/
+
+const $=id=>document.getElementById(id);
+const canvas=$("screen"),ctx=canvas.getContext("2d",{alpha:false});
+const image=ctx.createImageData(160,192);
+const keys={up:false,down:false,left:false,right:false,fire:false};
+const ram=new Uint8Array(128);
+let rom=null,pc=0,A=0,X=0,Y=0,SP=0xfd,P=0x24,cycles=0,halted=true;
+const C=1,Z=2,I=4,D=8,B=16,U=32,V=64,N=128;
+const tia=new Uint8Array(64);
+let frame=0;
+
+function flag(f,on){P=on?P|f:P&~f;P=(P|U)&~B}
+function nz(v){v&=255;flag(Z,v===0);flag(N,!!(v&128));return v}
+function read(a){
+ a&=0x1fff;
+ if(a>=0x1000)return rom?rom[(a-0x1000)&(rom.length-1)]:0xff;
+ if((a&0x1280)===0x0080)return ram[a&127];
+ if((a&0x1080)===0x0080)return ram[a&127];
+ if((a&0x1080)===0x0000){
+  const r=a&0x3f;
+  if(r===0x08)return 0xff;
+  if(r===0x0c)return 0xff;
+  return tia[r]||0;
+ }
+ if((a&0x0280)===0x0280){
+  const r=a&31;
+  if(r===0)return joystick();
+  if(r===4)return 0xff;
+  return 0;
+ }
+ return 0xff;
+}
+function write(a,v){
+ a&=0x1fff;v&=255;
+ if((a&0x1280)===0x0080){ram[a&127]=v;return}
+ if((a&0x1080)===0x0000){tia[a&63]=v;return}
+}
+function joystick(){
+ let v=255;
+ if(keys.right)v&=~128;
+ if(keys.left)v&=~64;
+ if(keys.down)v&=~32;
+ if(keys.up)v&=~16;
+ return v;
+}
+function fetch(){const v=read(pc);pc=(pc+1)&0x1fff;return v}
+function word(){const l=fetch();return l|(fetch()<<8)}
+function push(v){write(0x100|(SP&255),v);SP=(SP-1)&255}
+function pop(){SP=(SP+1)&255;return read(0x100|SP)}
+function adc(v){
+ const c=P&C?1:0,s=A+v+c;
+ flag(C,s>255);flag(V,(~(A^v)&(A^s)&128)!==0);A=nz(s);
+}
+function cmp(a,b){const r=(a-b)&255;flag(C,a>=b);nz(r)}
+function asl(v){flag(C,!!(v&128));return nz(v<<1)}
+function lsr(v){flag(C,!!(v&1));return nz(v>>>1)}
+function rol(v){const c=P&C?1:0;flag(C,!!(v&128));return nz((v<<1)|c)}
+function ror(v){const c=P&C?128:0;flag(C,!!(v&1));return nz((v>>>1)|c)}
+function addr(mode){
+ let a,b;
+ switch(mode){
+ case "imm":return {value:fetch(),address:null};
+ case "zp":return {address:fetch()};
+ case "zpx":return {address:(fetch()+X)&255};
+ case "zpy":return {address:(fetch()+Y)&255};
+ case "abs":return {address:word()&0x1fff};
+ case "absx":a=word();b=(a+X)&0xffff;return {address:b&0x1fff,cross:(a&0xff00)!==(b&0xff00)};
+ case "absy":a=word();b=(a+Y)&0xffff;return {address:b&0x1fff,cross:(a&0xff00)!==(b&0xff00)};
+ case "izx":a=(fetch()+X)&255;return {address:(read(a)|(read((a+1)&255)<<8))&0x1fff};
+ case "izy":a=fetch();b=read(a)|(read((a+1)&255)<<8);return {address:(b+Y)&0x1fff,cross:(b&0xff00)!==((b+Y)&0xff00)};
+ case "ind":a=word();return {address:read(a)|(read((a&0xff00)|((a+1)&255))<<8)};
+ case "acc":return {acc:true};
+ default:return {address:0};
+ }
+}
+function val(mode){
+ const o=addr(mode);
+ return {v:o.value!==undefined?o.value:read(o.address),...o};
+}
+function branch(ok){
+ const d=fetch();if(!ok)return 2;
+ const old=pc;pc=(pc+((d&128)?d-256:d))&0x1fff;
+ return 3+((old&0x1f00)!==(pc&0x1f00)?1:0);
+}
+const table=new Array(256);
+function def(code,op,mode="imp",cy=2){table[code]={op,mode,cy}}
+function defs(op,mode,cy,codes){for(const c of codes)def(c,op,mode,cy)}
+function initOpcodes(){
+ defs("BRK","imp",7,[0x00]);defs("ORA","izx",6,[0x01]);defs("ORA","zp",3,[0x05]);defs("ASL","zp",5,[0x06]);defs("PHP","imp",3,[0x08]);defs("ORA","imm",2,[0x09]);defs("ASL","acc",2,[0x0a]);defs("ORA","abs",4,[0x0d]);defs("ASL","abs",6,[0x0e]);
+ defs("BPL","rel",2,[0x10]);defs("ORA","izy",5,[0x11]);defs("ORA","zpx",4,[0x15]);defs("ASL","zpx",6,[0x16]);defs("CLC","imp",2,[0x18]);defs("ORA","absy",4,[0x19]);defs("ORA","absx",4,[0x1d]);defs("ASL","absx",7,[0x1e]);
+ defs("JSR","abs",6,[0x20]);defs("AND","izx",6,[0x21]);defs("BIT","zp",3,[0x24]);defs("AND","zp",3,[0x25]);defs("ROL","zp",5,[0x26]);defs("PLP","imp",4,[0x28]);defs("AND","imm",2,[0x29]);defs("ROL","acc",2,[0x2a]);defs("BIT","abs",4,[0x2c]);defs("AND","abs",4,[0x2d]);defs("ROL","abs",6,[0x2e]);
+ defs("BMI","rel",2,[0x30]);defs("AND","izy",5,[0x31]);defs("AND","zpx",4,[0x35]);defs("ROL","zpx",6,[0x36]);defs("SEC","imp",2,[0x38]);defs("AND","absy",4,[0x39]);defs("AND","absx",4,[0x3d]);defs("ROL","absx",7,[0x3e]);
+ defs("RTI","imp",6,[0x40]);defs("EOR","izx",6,[0x41]);defs("EOR","zp",3,[0x45]);defs("LSR","zp",5,[0x46]);defs("PHA","imp",3,[0x48]);defs("EOR","imm",2,[0x49]);defs("LSR","acc",2,[0x4a]);defs("JMP","abs",3,[0x4c]);defs("EOR","abs",4,[0x4d]);defs("LSR","abs",6,[0x4e]);
+ defs("BVC","rel",2,[0x50]);defs("EOR","izy",5,[0x51]);defs("EOR","zpx",4,[0x55]);defs("LSR","zpx",6,[0x56]);defs("CLI","imp",2,[0x58]);defs("EOR","absy",4,[0x59]);defs("EOR","absx",4,[0x5d]);defs("LSR","absx",7,[0x5e]);
+ defs("RTS","imp",6,[0x60]);defs("ADC","izx",6,[0x61]);defs("ADC","zp",3,[0x65]);defs("ROR","zp",5,[0x66]);defs("PLA","imp",4,[0x68]);defs("ADC","imm",2,[0x69]);defs("ROR","acc",2,[0x6a]);defs("JMP","ind",5,[0x6c]);defs("ADC","abs",4,[0x6d]);defs("ROR","abs",6,[0x6e]);
+ defs("BVS","rel",2,[0x70]);defs("ADC","izy",5,[0x71]);defs("ADC","zpx",4,[0x75]);defs("ROR","zpx",6,[0x76]);defs("SEI","imp",2,[0x78]);defs("ADC","absy",4,[0x79]);defs("ADC","absx",4,[0x7d]);defs("ROR","absx",7,[0x7e]);
+ defs("STA","izx",6,[0x81]);defs("STY","zp",3,[0x84]);defs("STA","zp",3,[0x85]);defs("STX","zp",3,[0x86]);defs("DEY","imp",2,[0x88]);defs("TXA","imp",2,[0x8a]);defs("STY","abs",4,[0x8c]);defs("STA","abs",4,[0x8d]);defs("STX","abs",4,[0x8e]);
+ defs("BCC","rel",2,[0x90]);defs("STA","izy",6,[0x91]);defs("STY","zpx",4,[0x94]);defs("STA","zpx",4,[0x95]);defs("STX","zpy",4,[0x96]);defs("TYA","imp",2,[0x98]);defs("STA","absy",5,[0x99]);defs("TXS","imp",2,[0x9a]);defs("STA","absx",5,[0x9d]);
+ defs("LDY","imm",2,[0xa0]);defs("LDA","izx",6,[0xa1]);defs("LDX","imm",2,[0xa2]);defs("LDY","zp",3,[0xa4]);defs("LDA","zp",3,[0xa5]);defs("LDX","zp",3,[0xa6]);defs("TAY","imp",2,[0xa8]);defs("LDA","imm",2,[0xa9]);defs("TAX","imp",2,[0xaa]);defs("LDY","abs",4,[0xac]);defs("LDA","abs",4,[0xad]);defs("LDX","abs",4,[0xae]);
+ defs("BCS","rel",2,[0xb0]);defs("LDA","izy",5,[0xb1]);defs("LDY","zpx",4,[0xb4]);defs("LDA","zpx",4,[0xb5]);defs("LDX","zpy",4,[0xb6]);defs("CLV","imp",2,[0xb8]);defs("LDA","absy",4,[0xb9]);defs("TSX","imp",2,[0xba]);defs("LDY","absx",4,[0xbc]);defs("LDA","absx",4,[0xbd]);defs("LDX","absy",4,[0xbe]);
+ defs("CPY","imm",2,[0xc0]);defs("CMP","izx",6,[0xc1]);defs("CPY","zp",3,[0xc4]);defs("CMP","zp",3,[0xc5]);defs("DEC","zp",5,[0xc6]);defs("INY","imp",2,[0xc8]);defs("CMP","imm",2,[0xc9]);defs("DEX","imp",2,[0xca]);defs("CPY","abs",4,[0xcc]);defs("CMP","abs",4,[0xcd]);defs("DEC","abs",6,[0xce]);
+ defs("BNE","rel",2,[0xd0]);defs("CMP","izy",5,[0xd1]);defs("CMP","zpx",4,[0xd5]);defs("DEC","zpx",6,[0xd6]);defs("CLD","imp",2,[0xd8]);defs("CMP","absy",4,[0xd9]);defs("CMP","absx",4,[0xdd]);defs("DEC","absx",7,[0xde]);
+ defs("CPX","imm",2,[0xe0]);defs("SBC","izx",6,[0xe1]);defs("CPX","zp",3,[0xe4]);defs("SBC","zp",3,[0xe5]);defs("INC","zp",5,[0xe6]);defs("INX","imp",2,[0xe8]);defs("SBC","imm",2,[0xe9,0xeb]);defs("NOP","imp",2,[0xea]);defs("CPX","abs",4,[0xec]);defs("SBC","abs",4,[0xed]);defs("INC","abs",6,[0xee]);
+ defs("BEQ","rel",2,[0xf0]);defs("SBC","izy",5,[0xf1]);defs("SBC","zpx",4,[0xf5]);defs("INC","zpx",6,[0xf6]);defs("SED","imp",2,[0xf8]);defs("SBC","absy",4,[0xf9]);defs("SBC","absx",4,[0xfd]);defs("INC","absx",7,[0xfe]);
+ for(const [c,m] of [[0x04,"zp"],[0x0c,"abs"],[0x14,"zpx"],[0x1a,"imp"],[0x1c,"absx"],[0x34,"zpx"],[0x3a,"imp"],[0x3c,"absx"],[0x44,"zp"],[0x54,"zpx"],[0x5a,"imp"],[0x5c,"absx"],[0x64,"zp"],[0x74,"zpx"],[0x7a,"imp"],[0x7c,"absx"],[0x80,"imm"],[0x82,"imm"],[0x89,"imm"],[0xc2,"imm"],[0xd4,"zpx"],[0xda,"imp"],[0xdc,"absx"],[0xe2,"imm"],[0xf4,"zpx"],[0xfa,"imp"],[0xfc,"absx"]])def(c,"NOP",m,m==="imp"?2:4);
+ for(const [c,op,m,cy] of [
+ [0x03,"SLO","izx",8],[0x07,"SLO","zp",5],[0x0f,"SLO","abs",6],[0x13,"SLO","izy",8],[0x17,"SLO","zpx",6],[0x1b,"SLO","absy",7],[0x1f,"SLO","absx",7],
+ [0x23,"RLA","izx",8],[0x27,"RLA","zp",5],[0x2f,"RLA","abs",6],[0x33,"RLA","izy",8],[0x37,"RLA","zpx",6],[0x3b,"RLA","absy",7],[0x3f,"RLA","absx",7],
+ [0x43,"SRE","izx",8],[0x47,"SRE","zp",5],[0x4f,"SRE","abs",6],[0x53,"SRE","izy",8],[0x57,"SRE","zpx",6],[0x5b,"SRE","absy",7],[0x5f,"SRE","absx",7],
+ [0x63,"RRA","izx",8],[0x67,"RRA","zp",5],[0x6f,"RRA","abs",6],[0x73,"RRA","izy",8],[0x77,"RRA","zpx",6],[0x7b,"RRA","absy",7],[0x7f,"RRA","absx",7],
+ [0x83,"SAX","izx",6],[0x87,"SAX","zp",3],[0x8f,"SAX","abs",4],[0x97,"SAX","zpy",4],
+ [0xa3,"LAX","izx",6],[0xa7,"LAX","zp",3],[0xaf,"LAX","abs",4],[0xb3,"LAX","izy",5],[0xb7,"LAX","zpy",4],[0xbf,"LAX","absy",4],
+ [0xc3,"DCP","izx",8],[0xc7,"DCP","zp",5],[0xcf,"DCP","abs",6],[0xd3,"DCP","izy",8],[0xd7,"DCP","zpx",6],[0xdb,"DCP","absy",7],[0xdf,"DCP","absx",7],
+ [0xe3,"ISC","izx",8],[0xe7,"ISC","zp",5],[0xef,"ISC","abs",6],[0xf3,"ISC","izy",8],[0xf7,"ISC","zpx",6],[0xfb,"ISC","absy",7],[0xff,"ISC","absx",7]
+ ])def(c,op,m,cy);
+ for(const c of [0x02,0x12,0x22,0x32,0x42,0x52,0x62,0x72,0x92,0xb2,0xd2,0xf2])def(c,"KIL","imp",2);
+ for(const c of [0x0b,0x2b])def(c,"ANC","imm",2);
+}
+initOpcodes();
+
+function step(){
+ if(halted||!rom)return;
+ const start=pc,opcode=fetch(),ins=table[opcode];
+ if(!ins){halted=true;throw Error("Άγνωστο opcode $"+opcode.toString(16)+" στη διεύθυνση $"+start.toString(16))}
+ const op=ins.op,m=ins.mode;
+ let o,v,a,r,cy=ins.cy;
+ if(m==="rel"&&["BCC","BCS","BEQ","BMI","BNE","BPL","BVC","BVS"].includes(op)){
+  const cond={BCC:!(P&C),BCS:!!(P&C),BEQ:!!(P&Z),BMI:!!(P&N),BNE:!(P&Z),BPL:!(P&N),BVC:!(P&V),BVS:!!(P&V)}[op];
+  cycles+=branch(cond);return;
+ }
+ switch(op){
+ case "KIL":halted=true;break;
+ case "NOP":if(m!=="imp")addr(m);break;
+ case "LDA":case "LDX":case "LDY":case "ORA":case "AND":case "EOR":case "ADC":case "SBC":case "CMP":case "CPX":case "CPY":case "BIT":case "LAX":case "ANC":
+  o=val(m);v=o.v;
+  if(o.cross&&(m==="absx"||m==="absy"||m==="izy")&&!["STA","SAX"].includes(op))cy++;
+  switch(op){
+   case "LDA":A=nz(v);break;case "LDX":X=nz(v);break;case "LDY":Y=nz(v);break;
+   case "LAX":A=X=nz(v);break;
+   case "ORA":A=nz(A|v);break;case "AND":A=nz(A&v);break;case "EOR":A=nz(A^v);break;
+   case "ADC":adc(v);break;case "SBC":adc(v^255);break;
+   case "CMP":cmp(A,v);break;case "CPX":cmp(X,v);break;case "CPY":cmp(Y,v);break;
+   case "BIT":flag(Z,!(A&v));flag(N,!!(v&128));flag(V,!!(v&64));break;
+   case "ANC":A=nz(A&v);flag(C,!!(A&128));break;
+  }break;
+ case "STA":case "STX":case "STY":case "SAX":o=addr(m);write(o.address,op==="STA"?A:op==="STX"?X:op==="STY"?Y:A&X);break;
+ case "ASL":case "LSR":case "ROL":case "ROR":
+  if(m==="acc"){A=({ASL:asl,LSR:lsr,ROL:rol,ROR:ror})[op](A)}
+  else{o=addr(m);v=read(o.address);r=({ASL:asl,LSR:lsr,ROL:rol,ROR:ror})[op](v);write(o.address,r)}break;
+ case "INC":case "DEC":o=addr(m);v=(read(o.address)+(op==="INC"?1:-1))&255;write(o.address,v);nz(v);break;
+ case "SLO":case "RLA":case "SRE":case "RRA":case "DCP":case "ISC":
+  o=addr(m);v=read(o.address);
+  if(op==="SLO"){v=asl(v);write(o.address,v);A=nz(A|v)}
+  if(op==="RLA"){v=rol(v);write(o.address,v);A=nz(A&v)}
+  if(op==="SRE"){v=lsr(v);write(o.address,v);A=nz(A^v)}
+  if(op==="RRA"){v=ror(v);write(o.address,v);adc(v)}
+  if(op==="DCP"){v=(v-1)&255;write(o.address,v);cmp(A,v)}
+  if(op==="ISC"){v=(v+1)&255;write(o.address,v);adc(v^255)}
+  break;
+ case "TAX":X=nz(A);break;case "TAY":Y=nz(A);break;case "TXA":A=nz(X);break;case "TYA":A=nz(Y);break;case "TSX":X=nz(SP);break;case "TXS":SP=X;break;
+ case "INX":X=nz(X+1);break;case "INY":Y=nz(Y+1);break;case "DEX":X=nz(X-1);break;case "DEY":Y=nz(Y-1);break;
+ case "CLC":flag(C,false);break;case "SEC":flag(C,true);break;case "CLI":flag(I,false);break;case "SEI":flag(I,true);break;case "CLV":flag(V,false);break;case "CLD":flag(D,false);break;case "SED":flag(D,true);break;
+ case "PHA":push(A);break;case "PHP":push(P|B|U);break;case "PLA":A=nz(pop());break;case "PLP":P=(pop()|U)&~B;break;
+ case "JMP":o=addr(m);pc=o.address&0x1fff;break;
+ case "JSR":a=word();push(((pc-1)>>8)&255);push((pc-1)&255);pc=a&0x1fff;break;
+ case "RTS":pc=((pop()|(pop()<<8))+1)&0x1fff;break;
+ case "RTI":P=(pop()|U)&~B;pc=(pop()|(pop()<<8))&0x1fff;break;
+ case "BRK":fetch();push((pc>>8)&255);push(pc&255);push(P|B|U);flag(I,true);pc=(read(0x1ffe)|(read(0x1fff)<<8))&0x1fff;break;
+ default:halted=true;throw Error("Δεν υλοποιείται η εντολή "+op);
+ }
+ cycles+=cy;
+}
+
+function reset(){
+ if(!rom)return;
+ ram.fill(0);tia.fill(0);A=X=Y=0;SP=0xfd;P=0x24;cycles=0;halted=false;
+ pc=(read(0x1ffc)|(read(0x1ffd)<<8))&0x1fff;
+ $("status").textContent="ROM φορτώθηκε. PC=$"+pc.toString(16).toUpperCase();
+}
+function color(n){
+ const hue=(n>>1)&7,lum=n&15;
+ const hues=[[0,0,0],[255,80,80],[255,160,40],[255,220,70],[120,230,80],[40,210,180],[80,150,255],[180,100,255]];
+ const c=hues[hue]||[0,0,0],k=0.18+lum/18;
+ return c.map(x=>Math.min(255,Math.round(x*k)));
+}
+function drawFrame(){
+ const bg=color(tia[9]||0),p0=color(tia[6]||0),pf=color(tia[8]||0);
+ const d=image.data;
+ for(let y=0;y<192;y++)for(let x=0;x<160;x++){
+  const i=(y*160+x)*4;
+  let c=bg;
+  const playfield=(x<80?((tia[13]>>(7-(x>>2)%8))&1):((tia[14]>>((x>>2)%8))&1));
+  if(playfield)c=pf;
+  if((x<8||x>151)&&(y<8||y>183))c=[0,0,0];
+  d[i]=c[0];d[i+1]=c[1];d[i+2]=c[2];d[i+3]=255;
+ }
+ ctx.putImageData(image,0,0);
+}
+function runFrame(){
+ if(!rom||halted)return;
+ try{
+  const target=cycles+2500,limit=50000;
+  let n=0;
+  while(cycles<target&&!halted&&n++<limit)step();
+  drawFrame();
+ }catch(e){halted=true;$("status").textContent="Σφάλμα CPU: "+e.message}
+}
+function loop(){if(rom&&!halted)runFrame();requestAnimationFrame(loop)}
+$("rom").addEventListener("change",async e=>{
+ const f=e.target.files&&e.target.files[0];if(!f)return;
+ try{
+  const b=new Uint8Array(await f.arrayBuffer());
+  if(b.length!==2048&&b.length!==4096)throw Error("Υποστηρίζονται ROM 2 KB και 4 KB. Μέγεθος: "+b.length+" bytes.");
+  rom=b;reset();
+ }catch(err){$("status").textContent=err.message}
 });
-
-// Φόρτωση της πραγματικής ROM
-document.getElementById('fileInput').addEventListener('change', function(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    document.getElementById('status').innerText = "Ανάγνωση αρχείου: " + file.name;
-
-    const reader = new FileReader();
-    reader.onload = function(event) {
-        const romData = new Uint8Array(event.target.result);
-        
-        // Στέλνουμε τα αληθινά bytes στον εξομοιωτή
-        Javatari.loadRom(romData);
-        
-        document.getElementById('status').innerText = "Το παιχνίδι " + file.name + " φορτώθηκε! Αν βλέπετε μαύρη οθόνη, πατήστε το F2 (Reset).";
-        
-        // Αυτόματο πάτημα του Reset μετά από μισό δευτερόλεπτο για να ξεκινήσει το Othello (PAL)
-        setTimeout(() => {
-            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', keyCode: 113, code: 'F2' }));
-            window.dispatchEvent(new KeyboardEvent('keyup', { key: 'F2', keyCode: 113, code: 'F2' }));
-        }, 500);
-    };
-    reader.readAsArrayBuffer(file);
+$("reset").addEventListener("click",reset);
+const keyMap={ArrowUp:"up",ArrowDown:"down",ArrowLeft:"left",ArrowRight:"right"," ":"fire"};
+document.addEventListener("keydown",e=>{
+ if(e.key.toLowerCase()==="r"){reset();return}
+ if(keyMap[e.key]){keys[keyMap[e.key]]=true;e.preventDefault()}
 });
+document.addEventListener("keyup",e=>{
+ if(keyMap[e.key]){keys[keyMap[e.key]]=false;e.preventDefault()}
+});
+document.querySelectorAll("[data-key]").forEach(b=>{
+ const k=b.dataset.key;
+ const on=e=>{e.preventDefault();keys[k]=true};
+ const off=e=>{e.preventDefault();keys[k]=false};
+ b.addEventListener("pointerdown",on);
+ ["pointerup","pointerleave","pointercancel"].forEach(ev=>b.addEventListener(ev,off));
+});
+requestAnimationFrame(loop);
 </script>
-
 </body>
 </html>
