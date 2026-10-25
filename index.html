@@ -1,299 +1,3591 @@
 <!DOCTYPE html>
-<html lang="el">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Atari 2600 Browser Emulator</title>
-    <style>
-        body {
-            background-color: #1a1a1a;
-            color: #ffffff;
-            font-family: Arial, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            margin: 0;
-            padding: 20px;
-            min-height: 100vh;
-        }
+<meta charset="UTF-8">
+<meta name="viewport"
+      content="width=device-width,
+               initial-scale=1.0,
+               maximum-scale=1.0,
+               user-scalable=no">
 
-        h1 {
-            color: #f0a500;
-            margin-bottom: 10px;
-        }
+<title>Retro Land - Atari 2600</title>
 
-        .controls-panel {
-            background: #2a2a2a;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            display: flex;
-            gap: 15px;
-            flex-wrap: wrap;
-            justify-content: center;
-            align-items: center;
-        }
+<style>
+* {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
 
-        select, input[type="file"], button {
-            background: #3a3a3a;
-            color: white;
-            border: 1px solid #555;
-            padding: 8px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-        }
+html,
+body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    min-height: 100%;
+    background: #050505;
+    color: #f0f0f0;
+    font-family: Arial, Helvetica, sans-serif;
+    overflow-x: hidden;
+}
 
-        /* 
-           Το Javatari θα φτιάξει αυτόματα ένα widget με δικό του μέγεθος. 
-           Αυτός ο περιέκτης εξασφαλίζει ότι θα κεντραριστεί σωστά.
-        */
-        #emulator-container {
-            background: #000;
-            border: 4px solid #333;
-            border-radius: 10px;
-            padding: 10px;
-            margin-bottom: 20px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-width: 640px;
-            min-height: 480px;
-        }
+body {
+    display: flex;
+    justify-content: center;
+}
 
-        /* Virtual Controls */
-        .virtual-controls {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 40px;
-            width: 100%;
-            max-width: 500px;
-            margin-top: 10px;
-        }
+#app {
+    width: 100%;
+    max-width: 1000px;
+    padding: 16px;
+}
 
-        .dpad {
-            display: grid;
-            grid-template-columns: repeat(3, 50px);
-            grid-template-rows: repeat(3, 50px);
-            gap: 5px;
-            justify-content: center;
-        }
+h1 {
+    margin: 0 0 6px 0;
+    font-size: 24px;
+}
 
-        .dpad-btn {
-            background: #333;
-            border: 2px solid #555;
-            border-radius: 8px;
-            color: white;
-            font-weight: bold;
-            user-select: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-        }
+.subtitle {
+    margin-bottom: 16px;
+    color: #aaa;
+    font-size: 13px;
+}
 
-        .dpad-btn:active {
-            background: #f0a500;
-        }
+.panel {
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 12px;
+}
 
-        .action-container {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
+.row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
 
-        .fire-btn {
-            width: 70px;
-            height: 70px;
-            background: #d92027;
-            border: 3px solid #ff4d4d;
-            border-radius: 50%;
-            color: white;
-            font-weight: bold;
-            box-shadow: 0 4px 0 #990000;
-            user-select: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 16px;
-            cursor: pointer;
-        }
+button,
+select,
+input[type="file"] {
+    font: inherit;
+}
 
-        .fire-btn:active {
-            transform: translateY(4px);
-            box-shadow: none;
-        }
+button,
+select {
+    background: #1c1c1c;
+    color: white;
+    border: 1px solid #444;
+    border-radius: 6px;
+    padding: 9px 12px;
+}
 
-        .info {
-            margin-top: 15px;
-            font-size: 12px;
-            color: #aaa;
-        }
-    </style>
-    
-    <!-- 1. Ρυθμίσεις παραμέτρων ΠΡΙΝ φορτώσει το script του Javatari -->
-    <script>
-        window.Javatari = {
-            ROOM: "emulator-container", // Εδώ θα χτιστεί αυτόματα ο emulator
-            AUTO_START: true,
-            SCRIPTS_PATH: "https://javatari.org"
-        };
-    </script>
-    
-    <!-- 2. Φόρτωση του επίσημου Emulator Script -->
-    <script src="https://javatari.orgjavatari.js"></script>
+button:active {
+    transform: scale(0.98);
+}
+
+#fileInput {
+    width: 100%;
+    max-width: 500px;
+}
+
+#status {
+    margin-top: 10px;
+    color: #aaa;
+    font-size: 13px;
+    white-space: pre-wrap;
+}
+
+#cpuInfo {
+    font-family: monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #bbb;
+}
+
+#screen {
+    display: block;
+    width: 100%;
+    max-width: 960px;
+    aspect-ratio: 4 / 3;
+    background: #000;
+    border: 2px solid #333;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    margin: 0 auto;
+}
+
+.controls {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    max-width: 420px;
+    margin: 0 auto;
+}
+
+.control {
+    min-height: 52px;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.control.empty {
+    visibility: hidden;
+}
+
+.small {
+    font-size: 12px;
+    color: #888;
+    margin-top: 10px;
+}
+
+.ok {
+    color: #8f8;
+}
+
+.warn {
+    color: #ffcc66;
+}
+</style>
 </head>
+
 <body>
 
-    <h1>Atari 2600 Emulator</h1>
+<div id="app">
 
-    <div class="controls-panel">
-        <div>
-            <label for="local-roms">Παιχνίδια Φακέλου: </label>
-            <select id="local-roms" onchange="loadProjectROM(this.value)">
-                <option value="">-- Επιλέξτε Παιχνίδι --</option>
+    <h1>Retro Land - Atari 2600</h1>
+    <div class="subtitle">
+        Atari 2600 browser emulator foundation
+    </div>
+
+    <div class="panel">
+
+        <div class="row">
+
+            <select id="romSelect">
+                <option value="">Select Atari 2600 ROM</option>
             </select>
+
+            <button id="loadSelected">
+                LOAD ROM
+            </button>
+
+            <button id="resetButton">
+                RESET
+            </button>
+
         </div>
 
-        <div>
-            <label for="file-input">Από PC: </label>
-            <input type="file" id="file-input" accept=".bin,.rom,.a26" onchange="loadPCROM(this)">
+        <div style="margin-top:10px;">
+            <input id="fileInput"
+                   type="file"
+                   accept=".bin,.a26,.rom,application/octet-stream">
         </div>
 
-        <button onclick="resetEmulator()">Console Reset</button>
+        <div id="status">
+            Initializing Atari 2600...
+        </div>
+
     </div>
 
-    <!-- Εδώ μέσα θα εμφανιστεί η κονσόλα αυτόματα -->
-    <div id="emulator-container"></div>
+    <div class="panel">
 
-    <div class="virtual-controls">
-        <div class="dpad">
-            <div></div>
-            <div class="dpad-btn" id="btn-up">↑</div>
-            <div></div>
-            <div class="dpad-btn" id="btn-left">←</div>
-            <div style="background:transparent"></div>
-            <div class="dpad-btn" id="btn-right">→</div>
-            <div></div>
-            <div class="dpad-btn" id="btn-down">↓</div>
-            <div></div>
+        <canvas id="screen"
+                width="320"
+                height="240">
+        </canvas>
+
+        <div class="small">
+            Video output will be connected to the TIA in the next step.
         </div>
-        <div class="action-container">
-            <div class="fire-btn" id="btn-fire">FIRE</div>
-        </div>
+
     </div>
 
-    <div class="info">
-        <p>⌨️ <b>Πληκτρολόγιο:</b> Βελάκια = Κίνηση | Space / Z = FIRE</p>
-        <p>🎮 <b>Χειριστήριο:</b> Πατήστε οποιοδήποτε κουμπί στο Gamepad για ενεργοποίηση.</p>
+    <div class="panel">
+
+        <div id="cpuInfo">
+            CPU: waiting for cartridge
+        </div>
+
     </div>
 
-    <script>
-        // Διάβασμα του roms/index.json για τις ROMs του Project
-        document.addEventListener("DOMContentLoaded", () => {
-            fetch("roms/index.json")
-                .then(res => res.json())
-                .then(data => {
-                    const dropdown = document.getElementById("local-roms");
-                    data.forEach(rom => {
-                        const option = document.createElement("option");
-                        option.value = `roms/${rom.file}`;
-                        option.textContent = rom.title;
-                        dropdown.appendChild(option);
-                    });
-                })
-                .catch(() => {
-                    console.log("Το index.json δεν φορτώθηκε (πιθανώς λόγω CORS τοπικά).");
-                });
-        });
+    <div class="panel">
 
-        // 🛠️ ΣΩΣΤΗ ΔΙΑΔΙΚΑΣΙΑ ΦΟΡΤΩΣΗΣ ROM ΣΤΗΝ ΚΟΝΣΟΛΑ JAVATARI
-        function insertRomToConsole(fileName, arrayBuffer) {
-            try {
-                // Μετατροπή των raw bytes σε Binary String που θέλει ο πυρήνας του Javatari
-                let binaryString = "";
-                const bytes = new Uint8Array(arrayBuffer);
-                for (let i = 0; i < bytes.byteLength; i++) {
-                    binaryString += String.fromCharCode(bytes[i]);
+        <div class="controls">
+
+            <button class="control empty"></button>
+
+            <button class="control"
+                    data-control="up">
+                UP
+            </button>
+
+            <button class="control empty"></button>
+
+            <button class="control"
+                    data-control="left">
+                LEFT
+            </button>
+
+            <button class="control"
+                    data-control="fire">
+                FIRE
+            </button>
+
+            <button class="control"
+                    data-control="right">
+                RIGHT
+            </button>
+
+            <button class="control empty"></button>
+
+            <button class="control"
+                    data-control="down">
+                DOWN
+            </button>
+
+            <button class="control empty"></button>
+
+        </div>
+
+        <div class="small">
+            Keyboard:
+            Arrow Keys = Joystick · Space = Fire · R = Reset
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+"use strict";
+
+/*
+============================================================
+ Atari 2600
+ 6507 CPU FOUNDATION
+============================================================
+
+ This first stage intentionally contains:
+
+   - 6507-compatible 6502 CPU core
+   - 13-bit address bus
+   - cartridge loading
+   - 2K cartridge support
+   - 4K cartridge support
+   - RIOT RAM
+   - basic RIOT I/O placeholders
+   - reset vector handling
+   - instruction execution
+   - cycle accounting
+
+ TIA/video is NOT faked here.
+
+ The next stage will connect the real CPU bus to:
+   TIA
+   RIOT timer
+   scanline timing
+   framebuffer generation
+============================================================
+*/
+
+
+/* =========================================================
+   UTILITIES
+========================================================= */
+
+function u8(value) {
+    return value & 0xFF;
+}
+
+function u16(value) {
+    return value & 0xFFFF;
+}
+
+
+/* =========================================================
+   CARTRIDGE
+========================================================= */
+
+class AtariCartridge {
+
+    constructor() {
+        this.rom = null;
+        this.size = 0;
+    }
+
+    load(data) {
+
+        if (!(data instanceof Uint8Array)) {
+            data = new Uint8Array(data);
+        }
+
+        const size = data.length;
+
+        if (size !== 2048 &&
+            size !== 4096) {
+
+            throw new Error(
+                "This first cartridge stage supports only 2K and 4K ROMs. " +
+                "Loaded size: " + size + " bytes."
+            );
+        }
+
+        this.rom = new Uint8Array(data);
+        this.size = size;
+    }
+
+    read(address) {
+
+        if (!this.rom) {
+            return 0xEA;
+        }
+
+        /*
+         * The 6507 exposes only 13 address lines.
+         */
+        address &= 0x1FFF;
+
+        /*
+         * Cartridge area:
+         *
+         * $1000-$1FFF
+         *
+         * For a 4K cartridge the whole 4K is mapped.
+         *
+         * For a 2K cartridge the 2K image is mirrored
+         * throughout the 4K cartridge window.
+         */
+        let offset = address - 0x1000;
+
+        if (offset < 0) {
+            offset = 0;
+        }
+
+        if (this.size === 2048) {
+            offset &= 0x07FF;
+        } else {
+            offset &= 0x0FFF;
+        }
+
+        return this.rom[offset];
+    }
+}
+
+
+/* =========================================================
+   RIOT
+========================================================= */
+
+class Riot {
+    constructor() {
+        /* =====================================================
+           128 BYTES INTERNAL RAM
+           ===================================================== */
+
+        this.ram = new Uint8Array(128);
+
+        /* =====================================================
+           PORT A - JOYSTICKS
+           ===================================================== */
+
+        this.swcha = 0xFF;
+        this.swacnt = 0x00;
+
+        /*
+         * External joystick state.
+         *
+         * Atari 2600 joystick inputs are active LOW:
+         * 0 = direction pressed
+         * 1 = direction released
+         *
+         * SWCHA:
+         *
+         * D7 = P0 Right
+         * D6 = P0 Left
+         * D5 = P0 Down
+         * D4 = P0 Up
+         *
+         * D3 = P1 Right
+         * D2 = P1 Left
+         * D1 = P1 Down
+         * D0 = P1 Up
+         */
+        this.joystick = 0xFF;
+
+        /* =====================================================
+           PORT B - CONSOLE SWITCHES
+           ===================================================== */
+
+        /*
+         * Default:
+         *
+         * D7 = P1 difficulty
+         * D6 = P0 difficulty
+         * D5 = unused
+         * D4 = unused
+         * D3 = Color/B&W
+         * D2 = unused
+         * D1 = Select
+         * D0 = Reset
+         *
+         * 1 = released / normal
+         * 0 = pressed
+         */
+        this.swchb = 0xFF;
+
+        /*
+         * Port B is effectively input-only on the 2600.
+         */
+        this.swbcnt = 0x00;
+
+        /* =====================================================
+           RIOT TIMER
+           ===================================================== */
+
+        this.timerValue = 0;
+        this.timerInterval = 1;
+
+        /*
+         * Number of CPU cycles until the next timer decrement.
+         */
+        this.timerCycles = 0;
+
+        /*
+         * After reaching zero the RIOT keeps zero for one
+         * complete interval. Then it changes to FF and
+         * decrements every CPU cycle.
+         */
+        this.timerZeroHold = false;
+        this.timerExpired = false;
+
+        /* =====================================================
+           RESET
+           ===================================================== */
+
+        this.reset();
+    }
+
+    /* =========================================================
+       RESET
+       ========================================================= */
+
+    reset() {
+        this.ram.fill(0);
+
+        this.swcha = 0xFF;
+        this.swacnt = 0x00;
+
+        this.joystick = 0xFF;
+
+        this.swchb = 0xFF;
+        this.swbcnt = 0x00;
+
+        this.timerValue = 0;
+        this.timerInterval = 1;
+        this.timerCycles = 0;
+
+        this.timerZeroHold = false;
+        this.timerExpired = false;
+    }
+
+    /* =========================================================
+       ADDRESS DECODING
+       ========================================================= */
+
+    normalizeAddress(address) {
+        /*
+         * RIOT occupies the $0280-$0297 area.
+         *
+         * The 2600 has a 13-bit address bus, so only the
+         * lower 13 bits are physically present.
+         */
+        return address & 0x1FFF;
+    }
+
+    /* =========================================================
+       RAM
+       ========================================================= */
+
+    isRAMAddress(address) {
+    return (
+        (address & 0x0280) === 0x0080
+    );
+}
+
+    ramAddress(address) {
+        return address & 0x7F;
+    }
+
+    /* =========================================================
+       REGISTER DECODING
+       ========================================================= */
+
+    registerAddress(address) {
+        /*
+         * Main RIOT register block:
+         *
+         * $0280-$0297
+         *
+         * We use the low 5 bits for the register selection.
+         */
+        return address & 0x1F;
+    }
+
+    /* =========================================================
+       READ
+       ========================================================= */
+
+    read(address) {
+        address = this.normalizeAddress(address);
+
+        /* -----------------------------------------------------
+           RAM
+           ----------------------------------------------------- */
+
+        if (this.isRAMAddress(address)) {
+            return this.ram[this.ramAddress(address)];
+        }
+
+        /* -----------------------------------------------------
+           RIOT registers
+           ----------------------------------------------------- */
+
+        /*
+         * Registers are located at $0280-$0297.
+         *
+         * Mirroring is handled by the lower register bits.
+         */
+        if ((address & 0x0700) === 0x0200) {
+            const reg = this.registerAddress(address);
+
+            switch (reg) {
+                /*
+                 * SWCHA
+                 */
+                case 0x00:
+                    return this.readSWCHA();
+
+                /*
+                 * SWACNT
+                 */
+                case 0x01:
+                    return this.swacnt;
+
+                /*
+                 * SWCHB
+                 */
+                case 0x02:
+                    return this.swchb;
+
+                /*
+                 * SWBCNT
+                 */
+                case 0x03:
+                    return this.swbcnt;
+
+                /*
+                 * INTIM
+                 */
+                case 0x04:
+                    return this.readTimer();
+
+                /*
+                 * INSTAT
+                 *
+                 * Bit 7 indicates timer underflow.
+                 */
+                case 0x05:
+                    return this.timerExpired ? 0x80 : 0x00;
+
+                default:
+                    /*
+                     * Other RIOT register mirrors are currently
+                     * unused/read as zero.
+                     */
+                    return 0x00;
+            }
+        }
+
+        return 0xFF;
+    }
+
+    /* =========================================================
+       WRITE
+       ========================================================= */
+
+    write(address, value) {
+        address = this.normalizeAddress(address);
+        value &= 0xFF;
+
+        /* -----------------------------------------------------
+           RAM
+           ----------------------------------------------------- */
+
+        if (this.isRAMAddress(address)) {
+            this.ram[this.ramAddress(address)] = value;
+            return;
+        }
+
+        /* -----------------------------------------------------
+           RIOT registers
+           ----------------------------------------------------- */
+
+        if ((address & 0x0700) === 0x0200) {
+            const reg = this.registerAddress(address);
+
+            switch (reg) {
+                /*
+                 * SWCHA
+                 */
+                case 0x00:
+                    this.swcha = value;
+                    return;
+
+                /*
+                 * SWACNT
+                 */
+                case 0x01:
+                    this.swacnt = value;
+                    return;
+
+                /*
+                 * SWCHB
+                 *
+                 * Hardware is input-only for the normal
+                 * console switches, so writes are ignored.
+                 */
+                case 0x02:
+                    return;
+
+                /*
+                 * SWBCNT
+                 */
+                case 0x03:
+                    this.swbcnt = value;
+                    return;
+
+                /*
+                 * TIM1T
+                 */
+                case 0x14:
+                    this.loadTimer(value, 1);
+                    return;
+
+                /*
+                 * TIM8T
+                 */
+                case 0x15:
+                    this.loadTimer(value, 8);
+                    return;
+
+                /*
+                 * TIM64T
+                 */
+                case 0x16:
+                    this.loadTimer(value, 64);
+                    return;
+
+                /*
+                 * T1024T
+                 */
+                case 0x17:
+                    this.loadTimer(value, 1024);
+                    return;
+
+                default:
+                    return;
+            }
+        }
+    }
+
+    /* =========================================================
+       PORT A
+       ========================================================= */
+
+    readSWCHA() {
+        /*
+         * For every bit:
+         *
+         * DDR = 1 -> output
+         * DDR = 0 -> input
+         *
+         * Output pins return the value written to SWCHA.
+         * Input pins return the external joystick state.
+         */
+        return (
+            (this.swcha & this.swacnt) |
+            (this.joystick & (~this.swacnt & 0xFF))
+        ) & 0xFF;
+    }
+
+    /* =========================================================
+       JOYSTICK INPUT
+       ========================================================= */
+
+    setJoystick(value) {
+        this.joystick = value & 0xFF;
+    }
+
+    setPlayer0Joystick(up, down, left, right) {
+        let value = this.joystick;
+
+        /*
+         * P0:
+         * D7 right
+         * D6 left
+         * D5 down
+         * D4 up
+         */
+
+        value = up
+            ? value & ~0x10
+            : value | 0x10;
+
+        value = down
+            ? value & ~0x20
+            : value | 0x20;
+
+        value = left
+            ? value & ~0x40
+            : value | 0x40;
+
+        value = right
+            ? value & ~0x80
+            : value | 0x80;
+
+        this.joystick = value & 0xFF;
+    }
+
+    setPlayer1Joystick(up, down, left, right) {
+        let value = this.joystick;
+
+        /*
+         * P1:
+         * D3 right
+         * D2 left
+         * D1 down
+         * D0 up
+         */
+
+        value = up
+            ? value & ~0x01
+            : value | 0x01;
+
+        value = down
+            ? value & ~0x02
+            : value | 0x02;
+
+        value = left
+            ? value & ~0x04
+            : value | 0x04;
+
+        value = right
+            ? value & ~0x08
+            : value | 0x08;
+
+        this.joystick = value & 0xFF;
+    }
+
+    /* =========================================================
+       CONSOLE SWITCHES
+       ========================================================= */
+
+    setConsoleSwitches(value) {
+        this.swchb = value & 0xFF;
+    }
+
+    setResetPressed(pressed) {
+        if (pressed) {
+            this.swchb &= ~0x01;
+        } else {
+            this.swchb |= 0x01;
+        }
+    }
+
+    setSelectPressed(pressed) {
+        if (pressed) {
+            this.swchb &= ~0x02;
+        } else {
+            this.swchb |= 0x02;
+        }
+    }
+
+    setColorMode(color) {
+        if (color) {
+            this.swchb |= 0x08;
+        } else {
+            this.swchb &= ~0x08;
+        }
+    }
+
+    setPlayer0Difficulty(pro) {
+        if (pro) {
+            this.swchb |= 0x40;
+        } else {
+            this.swchb &= ~0x40;
+        }
+    }
+
+    setPlayer1Difficulty(pro) {
+        if (pro) {
+            this.swchb |= 0x80;
+        } else {
+            this.swchb &= ~0x80;
+        }
+    }
+
+    /* =========================================================
+       TIMER
+       ========================================================= */
+
+    loadTimer(value, interval) {
+        this.timerValue = value & 0xFF;
+        this.timerInterval = interval;
+        this.timerCycles = interval;
+
+        // If zero is loaded, the next timer interval
+        // transitions directly into the underflow phase.
+        this.timerZeroHold = (this.timerValue === 0);
+        this.timerExpired = false;
+    }
+
+    /* =========================================================
+       TIMER TICK
+       ========================================================= */
+
+    tick(cycles) {
+        cycles = cycles | 0;
+
+        if (cycles <= 0) {
+            return;
+        }
+
+        while (cycles > 0) {
+            /*
+             * Normal interval counting.
+             */
+            if (!this.timerExpired) {
+                if (this.timerCycles > cycles) {
+                    this.timerCycles -= cycles;
+                    return;
                 }
-                
-                // Έλεγχος αν η κονσόλα είναι έτοιμη και φόρτωση
-                if (window.Javatari && typeof window.Javatari.loadRom === "function") {
-                    window.Javatari.loadRom(fileName, binaryString);
+
+                cycles -= this.timerCycles;
+
+                this.timerCycles = this.timerInterval;
+
+                /*
+                 * Timer reaches zero.
+                 */
+                if (this.timerValue > 0) {
+                    this.timerValue--;
+
+                    if (this.timerValue === 0) {
+                        this.timerZeroHold = true;
+                    }
                 } else {
-                    alert("Ο emulator Javatari δεν έχει αρχικοποιηθεί ακόμα.");
+                    /*
+                     * The zero state lasts for one complete
+                     * interval. After that the timer enters
+                     * free-running mode at FF.
+                     */
+                    if (this.timerZeroHold) {
+                        this.timerZeroHold = false;
+                        this.timerExpired = true;
+                        this.timerValue = 0xFF;
+
+                        /*
+                         * From this point onward it decrements
+                         * every single CPU cycle.
+                         */
+                        this.timerCycles = 1;
+                    }
                 }
-            } catch (error) {
-                console.error(error);
-                alert("Αποτυχία ανάγνωσης του αρχείου ROM.");
+
+                continue;
             }
-        }
 
-        // Φόρτωση ROM από τον φάκελο του Project
-        function loadProjectROM(path) {
-            if (!path) return;
-            const name = path.split('/').pop();
-            fetch(path)
-                .then(res => {
-                    if (!res.ok) throw new Error();
-                    return res.arrayBuffer();
-                })
-                .then(buffer => {
-                    insertRomToConsole(name, buffer);
-                })
-                .catch(() => alert("Σφάλμα: Το αρχείο δεν βρέθηκε στο φάκελο roms/ ή υπάρχει θέμα CORS."));
-        }
+            /*
+             * Timer has expired.
+             *
+             * After underflow it counts FF -> FE -> FD...
+             * once per CPU cycle.
+             */
+            const decrement = Math.min(
+                cycles,
+                this.timerValue
+            );
 
-        // Φόρτωση ROM τοπικά από το PC (ΔΕΝ επηρεάζεται από CORS, παίζει πάντα!)
-        function loadPCROM(element) {
-            const file = element.files[0];
-            if (!file) return;
+            this.timerValue =
+                (this.timerValue - decrement) & 0xFF;
 
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                insertRomToConsole(file.name, e.target.result);
-            };
-            reader.readAsArrayBuffer(file);
-        }
+            cycles -= decrement;
 
-        function resetEmulator() {
-            if (window.Javatari && typeof window.Javatari.keyDown === "function") {
-                window.Javatari.keyDown(112); // F1 Key (Reset)
-                setTimeout(() => window.Javatari.keyUp(112), 100);
+            if (cycles <= 0) {
+                return;
             }
+
+            /*
+             * Once it wraps again it remains in the
+             * free-running state.
+             */
+            this.timerValue = 0xFF;
         }
+    }
+}
 
-        // --- ΕΙΚΟΝΙΚΑ ΚΟΥΜΠΙΑ ---
-        function bindVirtualKey(id, code) {
-            const el = document.getElementById(id);
-            if (!el) return;
-            
-            const press = (e) => { e.preventDefault(); if(window.Javatari.keyDown) window.Javatari.keyDown(code); };
-            const release = (e) => { e.preventDefault(); if(window.Javatari.keyUp) window.Javatari.keyUp(code); };
 
-            el.addEventListener('mousedown', press);
-            el.addEventListener('mouseup', release);
-            el.addEventListener('touchstart', press);
-            el.addEventListener('touchend', release);
-        }
-        bindVirtualKey('btn-up', 38);
-        bindVirtualKey('btn-down', 40);
-        bindVirtualKey('btn-left', 37);
-        bindVirtualKey('btn-right', 39);
-        bindVirtualKey('btn-fire', 32); // Space
+/* =========================================================
+   TIA - FIRST RASTER RENDERER
+========================================================= */
 
-        // --- ΥΠΟΣΤΗΡΙΞΗ ΧΕΙΡΙΣΤΗΡΙΟΥ (GAMEPAD) ---
-        let activeGamepad = null;
-        const keysPressed = { up: false, down: false, left: false, right: false, fire: false };
 
-        window.addEventListener("gamepadconnected", (e) => {
-            activeGamepad = e.gamepad.index;
-            runGamepadLoop();
+class TIA {
+    constructor() {
+        this.registers = new Uint8Array(0x40);
+
+        this.width = 160;
+        this.height = 192;
+
+        this.colorClock = 0;
+        this.scanline = 0;
+        this.frameNumber = 0;  
+
+        this.vsync = false;
+        this.vblank = false;
+        this.wsync = false;
+        this.fireButtons = [false, false];  
+
+        this.playerPositions = [-100, -100];
+        this.missilePositions = [-100, -100];
+        this.ballPosition = -100;
+
+        this.canvas = document.getElementById("screen");
+        this.canvas.width = this.width;
+        this.canvas.height = this.height;
+
+        this.context = this.canvas.getContext("2d", {
+            alpha: false
         });
-        window.addEventListener("gamepaddisconnected", () => { activeGamepad = null; });
 
-        function runGamepadLoop() {
-            if (activeGamepad === null) return;
-            const gp = navigator.getGamepads()[activeGamepad];
-            if (!gp) return;
+        this.imageData = this.context.createImageData(
+            this.width,
+            this.height
+        );
 
+        this.framebuffer = this.imageData.data;
+
+        this.clearFrame();
+        this.present();
+    }
+
+    reset() {
+        this.registers.fill(0);
+
+        this.colorClock = 0;
+        this.scanline = 0;
+        this.frameNumber = 0;  
+
+        this.vsync = false;
+        this.vblank = false;
+        this.wsync = false;
+        this.fireButtons = [false, false];  
+
+        this.playerPositions = [-100, -100];
+        this.missilePositions = [-100, -100];
+        this.ballPosition = -100;
+
+        this.clearFrame();
+        this.present();
+    }
+
+    clearFrame() {
+        for (let i = 0; i < this.framebuffer.length; i += 4) {
+            this.framebuffer[i] = 0;
+            this.framebuffer[i + 1] = 0;
+            this.framebuffer[i + 2] = 0;
+            this.framebuffer[i + 3] = 255;
+        }
+    }
+
+    present() {
+        this.context.putImageData(this.imageData, 0, 0);
+    }
+
+    colorToRGB(value) {
+        value &= 0xFE;
+
+        const hue = (value >> 4) & 0x0F;
+        const lum = (value & 0x0E) >> 1;
+
+        if (hue === 0) {
+            const gray = Math.round((lum / 7) * 255);
+            return [gray, gray, gray];
+        }
+
+        const angle = ((hue * 22.5) - 15) * Math.PI / 180;
+        const brightness = lum / 7;
+        const saturation = 0.85;
+
+        const c = brightness * saturation;
+        const x = c * (
+            1 - Math.abs(((angle / (Math.PI / 3)) % 2) - 1)
+        );
+        const m = brightness - c;
+
+        let r = 0;
+        let g = 0;
+        let b = 0;
+
+        const sector = (
+            (Math.floor(angle / (Math.PI / 3)) % 6) + 6
+        ) % 6;
+
+        switch (sector) {
+            case 0: r = c; g = x; break;
+            case 1: r = x; g = c; break;
+            case 2: g = c; b = x; break;
+            case 3: g = x; b = c; break;
+            case 4: r = x; b = c; break;
+            case 5: r = c; b = x; break;
+        }
+
+        return [
+            Math.round((r + m) * 255),
+            Math.round((g + m) * 255),
+            Math.round((b + m) * 255)
+        ];
+    }
+
+   playfieldPixel(x) {
+    const pf0 = this.registers[0x0D];
+    const pf1 = this.registers[0x0E];
+    const pf2 = this.registers[0x0F];
+    const control = this.registers[0x0A];
+
+    // The left half always uses PF0, PF1 and PF2.
+    let sourceX;
+
+    if (x < 80) {
+        sourceX = x;
+    } else {
+        // CTRLPF bit 0: 1 = reflect the right half.
+        sourceX = (control & 0x01) ? 159 - x : x - 80;
+    }
+
+    let bit;
+
+    if (sourceX < 16) {
+        // PF0 uses its upper four bits.
+        bit = (pf0 >> (4 + Math.floor(sourceX / 4))) & 1;
+    } else if (sourceX < 48) {
+        // PF1 is displayed from bit 7 down to bit 0.
+        bit = (pf1 >> (7 - Math.floor((sourceX - 16) / 4))) & 1;
+    } else {
+        // PF2 is displayed from bit 0 up to bit 7.
+        bit = (pf2 >> Math.floor((sourceX - 48) / 4)) & 1;
+    }
+
+    return bit;
+}
+
+    playerPixel(player, x) {
+        const nusiz = this.registers[player === 0 ? 0x04 : 0x05];
+        const graphicsReg = player === 0 ? 0x1B : 0x1C;
+        const reflectReg = player === 0 ? 0x0B : 0x0C;
+
+        const position = this.playerPositions[player];
+        const mode = nusiz & 0x07;
+
+        const scale = [1, 1, 1, 1, 2, 2, 4, 1][mode];
+
+        const copies = [
+            [0],
+            [0, 16],
+            [0, 32],
+            [0, 16, 32],
+            [0],
+            [0, 32],
+            [0, 64],
+            [0, 16, 32]
+        ][mode];
+
+        const reflected = (this.registers[reflectReg] & 0x08) !== 0;
+        const graphics = this.registers[graphicsReg];
+
+        for (const offset of copies) {
+            const px = x - position - offset;
+
+            if (px < 0 || px >= 8 * scale) {
+                continue;
+            }
+
+            const sourceX = Math.floor(px / scale);
+            const bitIndex = reflected ? sourceX : 7 - sourceX;
+
+            if ((graphics >> bitIndex) & 1) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    missilePixel(player, x) {
+        const nusiz = this.registers[player === 0 ? 0x04 : 0x05];
+        const enable = this.registers[player === 0 ? 0x1D : 0x1E];
+
+        if ((enable & 0x02) === 0) {
+            return false;
+        }
+
+        const position = this.missilePositions[player];
+        const mode = nusiz & 0x07;
+
+        const copies = [
+            [0],
+            [0, 16],
+            [0, 32],
+            [0, 16, 32],
+            [0],
+            [0, 32],
+            [0, 64],
+            [0, 16, 32]
+        ][mode];
+
+        const widthMode = (nusiz >> 4) & 0x03;
+        const missileWidth = [1, 2, 4, 8][widthMode];
+
+        for (const offset of copies) {
+            const start = position + offset;
+
+            if (x >= start && x < start + missileWidth) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    ballPixel(x) {
+        if ((this.registers[0x1F] & 0x02) === 0) {
+            return false;
+        }
+
+        const widthMode = (this.registers[0x0A] >> 4) & 0x03;
+        const width = [1, 2, 4, 8][widthMode];
+
+        return x >= this.ballPosition && x < this.ballPosition + width;
+    }
+
+    drawPixel(x, y) {
+        if (x < 0 || x >= this.width || y < 0 || y >= this.height) {
+            return;
+        }
+
+        const index = (y * this.width + x) * 4;
+
+        if (this.vblank) {
+            this.framebuffer[index] = 0;
+            this.framebuffer[index + 1] = 0;
+            this.framebuffer[index + 2] = 0;
+            this.framebuffer[index + 3] = 255;
+            return;
+        }
+
+        const playfield = this.playfieldPixel(x) !== 0;
+        const p0 = this.playerPixel(0, x);
+        const p1 = this.playerPixel(1, x);
+        const m0 = this.missilePixel(0, x);
+        const m1 = this.missilePixel(1, x);
+        const ball = this.ballPixel(x);
+
+        const playfieldPriority = (this.registers[0x0A] & 0x04) !== 0;
+
+        let colorCode = this.registers[0x09];
+
+        if (playfieldPriority && (playfield || ball)) {
+            colorCode = this.registers[0x08];
+        } else if (p0 || m0) {
+            colorCode = this.registers[0x06];
+        } else if (p1 || m1) {
+            colorCode = this.registers[0x07];
+        } else if (playfield || ball) {
+            colorCode = this.registers[0x08];
+        }
+
+        const rgb = this.colorToRGB(colorCode);
+
+        this.framebuffer[index] = rgb[0];
+        this.framebuffer[index + 1] = rgb[1];
+        this.framebuffer[index + 2] = rgb[2];
+        this.framebuffer[index + 3] = 255;
+    }
+
+    
+    read(address) {
+        address &= 0x3F;
+
+        // Collision registers CXM0P through CXBLPF.
+        // Collision detection is not implemented yet.
+        switch (address) {
+            case 0x00:
+            case 0x01:
+            case 0x02:
+            case 0x03:
+            case 0x04:
+            case 0x05:
+            case 0x06:
+            case 0x07:
+                return 0x00;
+
+            // INPT0-INPT3: paddle inputs.
+            case 0x08:
+            case 0x09:
+            case 0x0A:
+            case 0x0B:
+                return 0x80;
+
+            // INPT4: player 0 FIRE.
+            case 0x0C:
+                return this.fireButtons[0] ? 0x00 : 0x80;
+
+            // INPT5: player 1 FIRE.
+            case 0x0D:
+                return this.fireButtons[1] ? 0x00 : 0x80;
+
+            default:
+                return 0x00;
+        }
+    }
+
+    write(address, value) {
+        address &= 0x3F;
+        value &= 0xFF;
+
+        this.registers[address] = value;
+
+        switch (address) {
+            case 0x00:
+                this.vsync = (value & 0x02) !== 0;
+                break;
+
+            case 0x01:
+                this.vblank = (value & 0x02) !== 0;
+                break;
+
+            case 0x02:
+                this.wsync = true;
+                break;
+
+            case 0x10:
+                this.playerPositions[0] = (this.colorClock - 68 + 160) % 160;
+                break;
+
+            case 0x11:
+                this.playerPositions[1] = (this.colorClock - 68 + 160) % 160;
+                break;
+
+            case 0x12:
+                this.missilePositions[0] = (this.colorClock - 68 + 160) % 160;
+                break;
+
+            case 0x13:
+                this.missilePositions[1] = (this.colorClock - 68 + 160) % 160;
+                break;
+
+            case 0x14:
+                this.ballPosition = (this.colorClock - 68 + 160) % 160;
+                break;
+
+            case 0x2A: {
+                const motionRegisters = [
+                    0x20, 0x21, 0x22, 0x23, 0x24
+                ];
+
+                for (let i = 0; i < motionRegisters.length; i++) {
+                    const nibble = (this.registers[motionRegisters[i]] >> 4) & 0x0F;
+                    const delta = nibble >= 8 ? nibble - 16 : nibble;
+
+                    if (i < 2) {
+                        this.playerPositions[i] =
+                            (this.playerPositions[i] - delta + 160) % 160;
+                    } else if (i < 4) {
+                        this.missilePositions[i - 2] =
+                            (this.missilePositions[i - 2] - delta + 160) % 160;
+                    } else {
+                        this.ballPosition =
+                            (this.ballPosition - delta + 160) % 160;
+                    }
+                }
+
+                break;
+            }
+        }
+    }
+
+    tickColorClocks(count) {
+        for (let i = 0; i < count; i++) {
+            if (this.colorClock >= 68 && this.colorClock < 228) {
+                const x = this.colorClock - 68;
+                const y = this.scanline - 40;
+
+                if (y >= 0 && y < this.height) {
+                    this.drawPixel(x, y);
+                }
+            }
+
+            this.colorClock++;
+
+            if (this.colorClock >= 228) {
+                this.colorClock = 0;
+                this.scanline++;
+
+                if (this.scanline >= 262) {
+                   this.scanline = 0;
+                   this.frameNumber++;
+                   this.present();
+                }
+
+                this.wsync = false;
+            }
+        }
+    }
+}
+
+
+
+/* =========================================================
+   MEMORY BUS
+========================================================= */
+
+class AtariBus {
+
+    constructor() {
+
+        this.cartridge = new AtariCartridge();
+        this.riot = new Riot();
+        this.tia = new TIA();
+
+        this.controller = {
+            up: false,
+            down: false,
+            left: false,
+            right: false,
+            fire: false
+        };
+    }
+
+    reset() {
+
+        this.riot.reset();
+        this.tia.reset();
+    }
+      syncControllerInputs() {
+        const controller = this.controller;
+
+        // Κατευθύνσεις παίκτη 0 μέσω του RIOT SWCHA.
+        this.riot.setPlayer0Joystick(
+            controller.up,
+            controller.down,
+            controller.left,
+            controller.right
+        );
+
+        // Κουμπί FIRE μέσω της εισόδου TIA INPT4.
+        this.tia.fireButtons[0] = controller.fire;
+    }
+
+    read(address) {
+
+        address &= 0x1FFF;
+
+        /*
+         * TIA area.
+         *
+         * The low 7 address bits select the TIA registers
+         * through the console's address decoding/mirroring.
+         */
+        if ((address & 0x1080) === 0x0000) {
+
+            return this.tia.read(address & 0x3F);
+        }
+
+        /*
+         * RIOT RAM / I/O.
+         */
+        if ((address & 0x1080) === 0x0080) {
+
+            return this.riot.read(address);
+        }
+
+        /*
+         * Cartridge.
+         */
+        if ((address & 0x1000) !== 0) {
+
+            return this.cartridge.read(address);
+        }
+
+        /*
+         * Unmapped area.
+         */
+        return 0xFF;
+    }
+
+    write(address, value) {
+
+        address &= 0x1FFF;
+        value &= 0xFF;
+
+        if ((address & 0x1080) === 0x0000) {
+
+            this.tia.write(address & 0x3F, value);
+            return;
+        }
+
+        if ((address & 0x1080) === 0x0080) {
+
+            this.riot.write(address, value);
+            return;
+        }
+
+        /*
+         * Cartridge writes are ignored for ordinary
+         * 2K/4K ROM cartridges.
+         */
+    }
+
+    tick(cpuCycles) {
+    cpuCycles = cpuCycles | 0;
+
+    if (cpuCycles <= 0) {
+        return;
+    }
+
+    // Advance the TIA for the instruction's CPU cycles.
+    this.tia.tickColorClocks(cpuCycles * 3);
+
+    let totalCycles = cpuCycles;
+
+    // WSYNC stalls the CPU until the next scanline.
+    if (this.tia.wsync) {
+        const remainingColorClocks = 228 - this.tia.colorClock;
+        const stallCycles = Math.ceil(remainingColorClocks / 3);
+
+        if (stallCycles > 0) {
+            this.tia.tickColorClocks(stallCycles * 3);
+            totalCycles += stallCycles;
+        }
+
+        this.tia.wsync = false;
+    }
+
+    // The RIOT timer also advances during the WSYNC stall.
+    this.riot.tick(totalCycles);
+}
+}
+
+
+/* =========================================================
+   6507 CPU
+========================================================= */
+
+class CPU6507 {
+    constructor(bus) {
+        this.bus = bus;
+
+        this.A = 0;
+        this.X = 0;
+        this.Y = 0;
+        this.SP = 0xFD;
+        this.PC = 0x0000;
+        this.P = 0x24;
+
+        this.halted = false;
+        this.waiting = false;
+
+        this.FLAG_C = 0x01;
+        this.FLAG_Z = 0x02;
+        this.FLAG_I = 0x04;
+        this.FLAG_D = 0x08;
+        this.FLAG_B = 0x10;
+        this.FLAG_U = 0x20;
+        this.FLAG_V = 0x40;
+        this.FLAG_N = 0x80;
+
+        this.opcodes = new Array(256).fill(null);
+        this.buildOpcodeTable();
+    }
+
+    /* =========================================================
+       BASIC BUS ACCESS
+       ========================================================= */
+
+    read(addr) {
+        return this.bus.read(addr & 0x1FFF) & 0xFF;
+    }
+
+    write(addr, value) {
+        this.bus.write(addr & 0x1FFF, value & 0xFF);
+    }
+
+    tick(cycles) {
+        if (this.bus && typeof this.bus.tick === "function") {
+            this.bus.tick(cycles);
+        }
+    }
+
+    /* =========================================================
+       FLAGS
+       ========================================================= */
+
+    getFlag(flag) {
+        return (this.P & flag) !== 0;
+    }
+
+    setFlag(flag, value) {
+        if (value) {
+            this.P |= flag;
+        } else {
+            this.P &= ~flag;
+        }
+
+        this.P |= this.FLAG_U;
+        this.P &= 0xFF;
+    }
+
+    setZN(value) {
+        value &= 0xFF;
+
+        this.setFlag(this.FLAG_Z, value === 0);
+        this.setFlag(this.FLAG_N, (value & 0x80) !== 0);
+    }
+
+    /* =========================================================
+       STACK
+       ========================================================= */
+
+    push(value) {
+        this.write(0x0100 | this.SP, value);
+        this.SP = (this.SP - 1) & 0xFF;
+    }
+
+    pop() {
+        this.SP = (this.SP + 1) & 0xFF;
+        return this.read(0x0100 | this.SP);
+    }
+
+    pushStatus(brk) {
+        let value = this.P | this.FLAG_U;
+
+        if (brk) {
+            value |= this.FLAG_B;
+        } else {
+            value &= ~this.FLAG_B;
+        }
+
+        this.push(value);
+    }
+
+    pullStatus() {
+        this.P = this.pop();
+        this.P |= this.FLAG_U;
+        this.P &= 0xFF;
+    }
+
+    /* =========================================================
+       FETCH
+       ========================================================= */
+
+    fetchByte() {
+        const value = this.read(this.PC);
+        this.PC = (this.PC + 1) & 0x1FFF;
+        return value;
+    }
+
+    fetchWord() {
+        const lo = this.fetchByte();
+        const hi = this.fetchByte();
+
+        return lo | (hi << 8);
+    }
+
+    /* =========================================================
+       ADDRESSING MODES
+       ========================================================= */
+
+    addrImmediate() {
+        return this.PC;
+    }
+
+    addrZeroPage() {
+        return this.fetchByte();
+    }
+
+    addrZeroPageX() {
+        const base = this.fetchByte();
+        return (base + this.X) & 0xFF;
+    }
+
+    addrZeroPageY() {
+        const base = this.fetchByte();
+        return (base + this.Y) & 0xFF;
+    }
+
+    addrAbsolute() {
+        return this.fetchWord();
+    }
+
+    addrAbsoluteX() {
+        const base = this.fetchWord();
+        const addr = (base + this.X) & 0xFFFF;
+
+        return {
+            addr,
+            pageCrossed: (base & 0xFF00) !== (addr & 0xFF00)
+        };
+    }
+
+    addrAbsoluteY() {
+        const base = this.fetchWord();
+        const addr = (base + this.Y) & 0xFFFF;
+
+        return {
+            addr,
+            pageCrossed: (base & 0xFF00) !== (addr & 0xFF00)
+        };
+    }
+
+    addrIndirectX() {
+        const zp = (this.fetchByte() + this.X) & 0xFF;
+
+        const lo = this.read(zp);
+        const hi = this.read((zp + 1) & 0xFF);
+
+        return lo | (hi << 8);
+    }
+
+    addrIndirectY() {
+        const zp = this.fetchByte();
+
+        const lo = this.read(zp);
+        const hi = this.read((zp + 1) & 0xFF);
+
+        const base = lo | (hi << 8);
+        const addr = (base + this.Y) & 0xFFFF;
+
+        return {
+            addr,
+            pageCrossed: (base & 0xFF00) !== (addr & 0xFF00)
+        };
+    }
+
+    /* =========================================================
+       MEMORY OPERANDS
+       ========================================================= */
+
+    readOperand(mode) {
+        switch (mode) {
+            case "imm":
+                return {
+                    value: this.read(this.addrImmediate()),
+                    pageCrossed: false
+                };
+
+            case "zp":
+                return {
+                    value: this.read(this.addrZeroPage()),
+                    pageCrossed: false
+                };
+
+            case "zpx":
+                return {
+                    value: this.read(this.addrZeroPageX()),
+                    pageCrossed: false
+                };
+
+            case "zpy":
+                return {
+                    value: this.read(this.addrZeroPageY()),
+                    pageCrossed: false
+                };
+
+            case "abs":
+                return {
+                    value: this.read(this.addrAbsolute()),
+                    pageCrossed: false
+                };
+
+            case "absx": {
+                const r = this.addrAbsoluteX();
+
+                return {
+                    value: this.read(r.addr),
+                    pageCrossed: r.pageCrossed
+                };
+            }
+
+            case "absy": {
+                const r = this.addrAbsoluteY();
+
+                return {
+                    value: this.read(r.addr),
+                    pageCrossed: r.pageCrossed
+                };
+            }
+
+            case "izx":
+                return {
+                    value: this.read(this.addrIndirectX()),
+                    pageCrossed: false
+                };
+
+            case "izy": {
+                const r = this.addrIndirectY();
+
+                return {
+                    value: this.read(r.addr),
+                    pageCrossed: r.pageCrossed
+                };
+            }
+
+            default:
+                throw new Error("Unsupported operand mode: " + mode);
+        }
+    }
+
+    getAddress(mode) {
+        switch (mode) {
+            case "zp":
+                return this.addrZeroPage();
+
+            case "zpx":
+                return this.addrZeroPageX();
+
+            case "zpy":
+                return this.addrZeroPageY();
+
+            case "abs":
+                return this.addrAbsolute();
+
+            case "absx":
+                return this.addrAbsoluteX().addr;
+
+            case "absy":
+                return this.addrAbsoluteY().addr;
+
+            case "izx":
+                return this.addrIndirectX();
+
+            case "izy":
+                return this.addrIndirectY().addr;
+
+            default:
+                throw new Error("Unsupported address mode: " + mode);
+        }
+    }
+
+    /* =========================================================
+       ALU
+       ========================================================= */
+
+    adc(value) {
+        value &= 0xFF;
+
+        const a = this.A;
+        const carry = this.getFlag(this.FLAG_C) ? 1 : 0;
+
+        const binarySum = a + value + carry;
+        const binaryResult = binarySum & 0xFF;
+
+        const overflow =
+            (~(a ^ value) & (a ^ binaryResult) & 0x80) !== 0;
+
+        if (this.getFlag(this.FLAG_D)) {
+            let decimal = binarySum;
+
+            if (((a & 0x0F) + (value & 0x0F) + carry) > 9) {
+                decimal += 0x06;
+            }
+
+            if (decimal > 0x99) {
+                decimal += 0x60;
+            }
+
+            this.setFlag(this.FLAG_C, decimal > 0xFF);
+            this.A = decimal & 0xFF;
+
+            // NMOS 6502: N/Z/V are based on the binary result.
+            this.setFlag(this.FLAG_Z, binaryResult === 0);
+            this.setFlag(this.FLAG_N, (binaryResult & 0x80) !== 0);
+            this.setFlag(this.FLAG_V, overflow);
+
+            return;
+        }
+
+        this.setFlag(this.FLAG_C, binarySum > 0xFF);
+        this.setFlag(this.FLAG_V, overflow);
+
+        this.A = binaryResult;
+        this.setZN(this.A);
+    }
+
+   sbc(value) {
+        value &= 0xFF;
+
+        const a = this.A;
+        const carry = this.getFlag(this.FLAG_C) ? 1 : 0;
+
+        const diff = a - value - (1 - carry);
+        const binaryResult = diff & 0xFF;
+
+        const overflow =
+            ((a ^ binaryResult) & (a ^ value) & 0x80) !== 0;
+
+        if (this.getFlag(this.FLAG_D)) {
+            let lo = (a & 0x0F) - (value & 0x0F) - (1 - carry);
+            let hi = (a >> 4) - (value >> 4);
+
+            if (lo < 0) {
+                lo -= 6;
+                hi--;
+            }
+
+            if (hi < 0) {
+                hi -= 6;
+            }
+
+            this.setFlag(this.FLAG_C, diff >= 0);
+
+            this.A = ((hi << 4) | (lo & 0x0F)) & 0xFF;
+
+            // NMOS 6502 decimal SBC also leaves N/Z/V
+            // according to the binary subtraction result.
+            this.setFlag(this.FLAG_Z, binaryResult === 0);
+            this.setFlag(this.FLAG_N, (binaryResult & 0x80) !== 0);
+            this.setFlag(this.FLAG_V, overflow);
+
+            return;
+        }
+
+        this.setFlag(this.FLAG_C, diff >= 0);
+        this.setFlag(this.FLAG_V, overflow);
+
+        this.A = binaryResult;
+        this.setZN(this.A);
+    }
+
+    compare(reg, value) {
+        const result = (reg - value) & 0xFF;
+
+        this.setFlag(this.FLAG_C, reg >= value);
+        this.setZN(result);
+    }
+
+    /* =========================================================
+       READ INSTRUCTIONS
+       ========================================================= */
+
+    executeRead(op, value) {
+        value &= 0xFF;
+
+        switch (op) {
+            case "LDA":
+                this.A = value;
+                this.setZN(this.A);
+                break;
+
+            case "LDX":
+                this.X = value;
+                this.setZN(this.X);
+                break;
+
+            case "LDY":
+                this.Y = value;
+                this.setZN(this.Y);
+                break;
+
+            case "ORA":
+                this.A = (this.A | value) & 0xFF;
+                this.setZN(this.A);
+                break;
+
+            case "AND":
+                this.A = (this.A & value) & 0xFF;
+                this.setZN(this.A);
+                break;
+
+            case "EOR":
+                this.A = (this.A ^ value) & 0xFF;
+                this.setZN(this.A);
+                break;
+
+            case "ADC":
+                this.adc(value);
+                break;
+
+            case "SBC":
+                this.sbc(value);
+                break;
+
+            case "CMP":
+                this.compare(this.A, value);
+                break;
+
+            case "CPX":
+                this.compare(this.X, value);
+                break;
+
+            case "CPY":
+                this.compare(this.Y, value);
+                break;
+
+            case "BIT":
+                this.setFlag(this.FLAG_Z, (this.A & value) === 0);
+                this.setFlag(this.FLAG_V, (value & 0x40) !== 0);
+                this.setFlag(this.FLAG_N, (value & 0x80) !== 0);
+                break;
+
+            default:
+                throw new Error("Unsupported read operation: " + op);
+        }
+    }
+
+    /* =========================================================
+       SHIFT / ROTATE
+       ========================================================= */
+
+    shiftValue(op, value) {
+        value &= 0xFF;
+
+        let result = value;
+
+        switch (op) {
+            case "ASL":
+                this.setFlag(this.FLAG_C, (value & 0x80) !== 0);
+                result = (value << 1) & 0xFF;
+                break;
+
+            case "LSR":
+                this.setFlag(this.FLAG_C, (value & 0x01) !== 0);
+                result = (value >> 1) & 0xFF;
+                break;
+
+            case "ROL": {
+                const oldCarry = this.getFlag(this.FLAG_C) ? 1 : 0;
+
+                this.setFlag(this.FLAG_C, (value & 0x80) !== 0);
+
+                result = ((value << 1) | oldCarry) & 0xFF;
+                break;
+            }
+
+            case "ROR": {
+                const oldCarry = this.getFlag(this.FLAG_C) ? 1 : 0;
+
+                this.setFlag(this.FLAG_C, (value & 0x01) !== 0);
+
+                result = ((value >> 1) | (oldCarry << 7)) & 0xFF;
+                break;
+            }
+
+            default:
+                throw new Error("Unsupported shift operation: " + op);
+        }
+
+        this.setZN(result);
+
+        return result;
+    }
+
+    /* =========================================================
+       OPCODE TABLE
+       ========================================================= */
+
+    define(opcode, operation, mode, cycles, pagePenalty = false) {
+        this.opcodes[opcode & 0xFF] = {
+            operation,
+            mode,
+            cycles,
+            pagePenalty
+        };
+    }
+
+    defineMany(operation, entries) {
+        for (const entry of entries) {
+            this.define(
+                entry[0],
+                operation,
+                entry[1],
+                entry[2],
+                entry[3] || false
+            );
+        }
+    }
+
+    buildOpcodeTable() {
+        /*
+         * Official NMOS 6502 instruction set.
+         *
+         * The Atari 2600's 6507 is a 6502-family CPU with
+         * a 13-bit address bus. The opcode/addressing behavior
+         * here therefore follows the official 6502 instructions.
+         */
+
+        /* ADC */
+        this.defineMany("ADC", [
+            [0x69, "imm", 2],
+            [0x65, "zp", 3],
+            [0x75, "zpx", 4],
+            [0x6D, "abs", 4],
+            [0x7D, "absx", 4, true],
+            [0x79, "absy", 4, true],
+            [0x61, "izx", 6],
+            [0x71, "izy", 5, true]
+        ]);
+
+        /* AND */
+        this.defineMany("AND", [
+            [0x29, "imm", 2],
+            [0x25, "zp", 3],
+            [0x35, "zpx", 4],
+            [0x2D, "abs", 4],
+            [0x3D, "absx", 4, true],
+            [0x39, "absy", 4, true],
+            [0x21, "izx", 6],
+            [0x31, "izy", 5, true]
+        ]);
+
+        /* ASL */
+        this.defineMany("ASL", [
+            [0x0A, "acc", 2],
+            [0x06, "zp", 5],
+            [0x16, "zpx", 6],
+            [0x0E, "abs", 6],
+            [0x1E, "absx", 7]
+        ]);
+
+        /* Branches */
+        this.define(0x90, "BCC", "rel", 2);
+        this.define(0xB0, "BCS", "rel", 2);
+        this.define(0xF0, "BEQ", "rel", 2);
+        this.define(0x30, "BMI", "rel", 2);
+        this.define(0xD0, "BNE", "rel", 2);
+        this.define(0x10, "BPL", "rel", 2);
+        this.define(0x50, "BVC", "rel", 2);
+        this.define(0x70, "BVS", "rel", 2);
+
+        /* BIT */
+        this.define(0x24, "BIT", "zp", 3);
+        this.define(0x2C, "BIT", "abs", 4);
+
+        /* BRK */
+        this.define(0x00, "BRK", "imp", 7);
+
+        /* Flag instructions */
+        this.define(0x18, "CLC", "imp", 2);
+        this.define(0xD8, "CLD", "imp", 2);
+        this.define(0x58, "CLI", "imp", 2);
+        this.define(0xB8, "CLV", "imp", 2);
+
+        /* CMP */
+        this.defineMany("CMP", [
+            [0xC9, "imm", 2],
+            [0xC5, "zp", 3],
+            [0xD5, "zpx", 4],
+            [0xCD, "abs", 4],
+            [0xDD, "absx", 4, true],
+            [0xD9, "absy", 4, true],
+            [0xC1, "izx", 6],
+            [0xD1, "izy", 5, true]
+        ]);
+
+        /* CPX */
+        this.defineMany("CPX", [
+            [0xE0, "imm", 2],
+            [0xE4, "zp", 3],
+            [0xEC, "abs", 4]
+        ]);
+
+        /* CPY */
+        this.defineMany("CPY", [
+            [0xC0, "imm", 2],
+            [0xC4, "zp", 3],
+            [0xCC, "abs", 4]
+        ]);
+
+        /* DEC */
+        this.defineMany("DEC", [
+            [0xC6, "zp", 5],
+            [0xD6, "zpx", 6],
+            [0xCE, "abs", 6],
+            [0xDE, "absx", 7]
+        ]);
+
+        /* DEX / DEY */
+        this.define(0xCA, "DEX", "imp", 2);
+        this.define(0x88, "DEY", "imp", 2);
+
+        /* EOR */
+        this.defineMany("EOR", [
+            [0x49, "imm", 2],
+            [0x45, "zp", 3],
+            [0x55, "zpx", 4],
+            [0x4D, "abs", 4],
+            [0x5D, "absx", 4, true],
+            [0x59, "absy", 4, true],
+            [0x41, "izx", 6],
+            [0x51, "izy", 5, true]
+        ]);
+
+        /* INC */
+        this.defineMany("INC", [
+            [0xE6, "zp", 5],
+            [0xF6, "zpx", 6],
+            [0xEE, "abs", 6],
+            [0xFE, "absx", 7]
+        ]);
+
+        /* INX / INY */
+        this.define(0xE8, "INX", "imp", 2);
+        this.define(0xC8, "INY", "imp", 2);
+
+        /* JMP */
+        this.define(0x4C, "JMP", "abs", 3);
+        this.define(0x6C, "JMP", "ind", 5);
+
+        /* JSR */
+        this.define(0x20, "JSR", "abs", 6);
+
+        /* LDA */
+        this.defineMany("LDA", [
+            [0xA9, "imm", 2],
+            [0xA5, "zp", 3],
+            [0xB5, "zpx", 4],
+            [0xAD, "abs", 4],
+            [0xBD, "absx", 4, true],
+            [0xB9, "absy", 4, true],
+            [0xA1, "izx", 6],
+            [0xB1, "izy", 5, true]
+        ]);
+
+        /* LDX */
+        this.defineMany("LDX", [
+            [0xA2, "imm", 2],
+            [0xA6, "zp", 3],
+            [0xB6, "zpy", 4],
+            [0xAE, "abs", 4],
+            [0xBE, "absy", 4, true]
+        ]);
+
+        /* LDY */
+        this.defineMany("LDY", [
+            [0xA0, "imm", 2],
+            [0xA4, "zp", 3],
+            [0xB4, "zpx", 4],
+            [0xAC, "abs", 4],
+            [0xBC, "absx", 4, true]
+        ]);
+
+        /* LSR */
+        this.defineMany("LSR", [
+            [0x4A, "acc", 2],
+            [0x46, "zp", 5],
+            [0x56, "zpx", 6],
+            [0x4E, "abs", 6],
+            [0x5E, "absx", 7]
+        ]);
+
+        /* NOP */
+        this.define(0xEA, "NOP", "imp", 2);
+
+        /* ORA */
+        this.defineMany("ORA", [
+            [0x09, "imm", 2],
+            [0x05, "zp", 3],
+            [0x15, "zpx", 4],
+            [0x0D, "abs", 4],
+            [0x1D, "absx", 4, true],
+            [0x19, "absy", 4, true],
+            [0x01, "izx", 6],
+            [0x11, "izy", 5, true]
+        ]);
+
+        /* Stack */
+        this.define(0x48, "PHA", "imp", 3);
+        this.define(0x08, "PHP", "imp", 3);
+        this.define(0x68, "PLA", "imp", 4);
+        this.define(0x28, "PLP", "imp", 4);
+
+        /* ROL */
+        this.defineMany("ROL", [
+            [0x2A, "acc", 2],
+            [0x26, "zp", 5],
+            [0x36, "zpx", 6],
+            [0x2E, "abs", 6],
+            [0x3E, "absx", 7]
+        ]);
+
+        /* ROR */
+        this.defineMany("ROR", [
+            [0x6A, "acc", 2],
+            [0x66, "zp", 5],
+            [0x76, "zpx", 6],
+            [0x6E, "abs", 6],
+            [0x7E, "absx", 7]
+        ]);
+
+        /* RTI / RTS */
+        this.define(0x40, "RTI", "imp", 6);
+        this.define(0x60, "RTS", "imp", 6);
+
+        /* SBC */
+        this.defineMany("SBC", [
+            [0xE9, "imm", 2],
+            [0xE5, "zp", 3],
+            [0xF5, "zpx", 4],
+            [0xED, "abs", 4],
+            [0xFD, "absx", 4, true],
+            [0xF9, "absy", 4, true],
+            [0xE1, "izx", 6],
+            [0xF1, "izy", 5, true]
+        ]);
+          
+           /* ISC / ISB — undocumented 6502 instruction */
+        this.defineMany("ISC", [
+            [0xE3, "izx", 8],
+            [0xE7, "zp", 5],
+            [0xEF, "abs", 6],
+            [0xF3, "izy", 8],
+            [0xF7, "zpx", 6],
+            [0xFB, "absy", 7],
+            [0xFF, "absx", 7]
+        ]);
+
+          /* ANC — undocumented NMOS 6502 instruction */
+        this.define(0x0B, "ANC", "imm", 2);
+        this.define(0x2B, "ANC", "imm", 2);
+          
+          /* Other stable undocumented NMOS 6502 instructions */
+
+        this.defineMany("SLO", [
+            [0x03, "izx", 8],
+            [0x07, "zp", 5],
+            [0x0F, "abs", 6],
+            [0x13, "izy", 8],
+            [0x17, "zpx", 6],
+            [0x1B, "absy", 7],
+            [0x1F, "absx", 7]
+        ]);
+
+        this.defineMany("RLA", [
+            [0x23, "izx", 8],
+            [0x27, "zp", 5],
+            [0x2F, "abs", 6],
+            [0x33, "izy", 8],
+            [0x37, "zpx", 6],
+            [0x3B, "absy", 7],
+            [0x3F, "absx", 7]
+        ]);
+
+        this.defineMany("SRE", [
+            [0x43, "izx", 8],
+            [0x47, "zp", 5],
+            [0x4F, "abs", 6],
+            [0x53, "izy", 8],
+            [0x57, "zpx", 6],
+            [0x5B, "absy", 7],
+            [0x5F, "absx", 7]
+        ]);
+
+        this.defineMany("RRA", [
+            [0x63, "izx", 8],
+            [0x67, "zp", 5],
+            [0x6F, "abs", 6],
+            [0x73, "izy", 8],
+            [0x77, "zpx", 6],
+            [0x7B, "absy", 7],
+            [0x7F, "absx", 7]
+        ]);
+
+        this.defineMany("SAX", [
+            [0x83, "izx", 6],
+            [0x87, "zp", 3],
+            [0x8F, "abs", 4],
+            [0x97, "zpy", 4]
+        ]);
+
+        this.defineMany("LAX", [
+            [0xA3, "izx", 6],
+            [0xA7, "zp", 3],
+            [0xAF, "abs", 4],
+            [0xB3, "izy", 5, true],
+            [0xB7, "zpy", 4],
+            [0xBF, "absy", 4, true]
+        ]);
+
+        this.defineMany("DCP", [
+            [0xC3, "izx", 8],
+            [0xC7, "zp", 5],
+            [0xCF, "abs", 6],
+            [0xD3, "izy", 8],
+            [0xD7, "zpx", 6],
+            [0xDB, "absy", 7],
+            [0xDF, "absx", 7]
+        ]);
+
+          /* Undocumented NOP variants */
+
+        this.defineMany("NOP", [
+            [0x04, "zp", 3],
+            [0x0C, "abs", 4],
+            [0x14, "zpx", 4],
+            [0x1A, "imp", 2],
+            [0x1C, "absx", 4, true],
+            [0x34, "zpx", 4],
+            [0x3A, "imp", 2],
+            [0x3C, "absx", 4, true],
+            [0x44, "zp", 3],
+            [0x54, "zpx", 4],
+            [0x5A, "imp", 2],
+            [0x5C, "absx", 4, true],
+            [0x64, "zp", 3],
+            [0x74, "zpx", 4],
+            [0x7A, "imp", 2],
+            [0x7C, "absx", 4, true],
+            [0x80, "imm", 2],
+            [0x82, "imm", 2],
+            [0x89, "imm", 2],
+            [0xC2, "imm", 2],
+            [0xD4, "zpx", 4],
+            [0xDA, "imp", 2],
+            [0xDC, "absx", 4, true],
+            [0xE2, "imm", 2],
+            [0xF4, "zpx", 4],
+            [0xFA, "imp", 2],
+            [0xFC, "absx", 4, true]
+        ]);
+
+        /* Undocumented SBC immediate alias */
+        this.define(0xEB, "SBC", "imm", 2);
+          
+
+        /* KIL / JAM — CPU halt instructions */
+        for (const opcode of [
+            0x02, 0x12, 0x22, 0x32,
+            0x42, 0x52, 0x62, 0x72,
+            0x92, 0xB2, 0xD2, 0xF2
+        ]) {
+            this.define(opcode, "KIL", "imp", 2);
+        }
+
+        /* SEC / SED / SEI */
+        this.define(0x38, "SEC", "imp", 2);
+        this.define(0xF8, "SED", "imp", 2);
+        this.define(0x78, "SEI", "imp", 2);
+
+        /* STA */
+        this.defineMany("STA", [
+            [0x85, "zp", 3],
+            [0x95, "zpx", 4],
+            [0x8D, "abs", 4],
+            [0x9D, "absx", 5],
+            [0x99, "absy", 5],
+            [0x81, "izx", 6],
+            [0x91, "izy", 6]
+        ]);
+
+        /* STX */
+        this.defineMany("STX", [
+            [0x86, "zp", 3],
+            [0x96, "zpy", 4],
+            [0x8E, "abs", 4]
+        ]);
+
+        /* STY */
+        this.defineMany("STY", [
+            [0x84, "zp", 3],
+            [0x94, "zpx", 4],
+            [0x8C, "abs", 4]
+        ]);
+
+        /* Transfers */
+        this.define(0xAA, "TAX", "imp", 2);
+        this.define(0xA8, "TAY", "imp", 2);
+        this.define(0xBA, "TSX", "imp", 2);
+        this.define(0x8A, "TXA", "imp", 2);
+        this.define(0x9A, "TXS", "imp", 2);
+        this.define(0x98, "TYA", "imp", 2);
+    }
+
+    /* =========================================================
+       BRANCH
+       ========================================================= */
+
+    branch(condition) {
+    const offset = this.fetchByte();
+
+    if (!condition) {
+        return 2;
+    }
+
+    const oldPC = this.PC;
+
+    const signedOffset =
+        (offset & 0x80)
+            ? offset - 0x100
+            : offset;
+
+    this.PC = (this.PC + signedOffset) & 0x1FFF;
+
+    let cycles = 3;
+
+    if ((oldPC & 0x1F00) !== (this.PC & 0x1F00)) {
+        cycles++;
+    }
+
+    return cycles;
+}
+    /* =========================================================
+       JMP INDIRECT
+       ========================================================= */
+
+    readIndirect6502Bug(pointer) {
+        const lo = this.read(pointer);
+
+        /*
+         * Original NMOS 6502 behavior:
+         * JMP ($xxFF) reads the high byte from $xx00
+         * instead of $xx+1xx.
+         */
+        const hiAddress =
+            (pointer & 0x00FF) === 0x00FF
+                ? (pointer & 0xFF00)
+                : ((pointer + 1) & 0xFFFF);
+
+        const hi = this.read(hiAddress);
+
+        return lo | (hi << 8);
+    }
+
+    /* =========================================================
+       EXECUTION
+       ========================================================= */
+
+    execute(instruction) {
+        const op = instruction.operation;
+        const mode = instruction.mode;
+
+        /* -----------------------------------------------------
+           Read-type instructions
+           ----------------------------------------------------- */
+
+        if (
+            op === "LDA" ||
+            op === "LDX" ||
+            op === "LDY" ||
+            op === "ORA" ||
+            op === "AND" ||
+            op === "EOR" ||
+            op === "ADC" ||
+            op === "SBC" ||
+            op === "CMP" ||
+            op === "CPX" ||
+            op === "CPY" ||
+            op === "BIT"
+        ) {
+            const operand = this.readOperand(mode);
+
+            this.executeRead(op, operand.value);
+
+            return instruction.cycles +
+                (instruction.pagePenalty && operand.pageCrossed ? 1 : 0);
+        }
+
+        /* -----------------------------------------------------
+           ASL / LSR / ROL / ROR
+           ----------------------------------------------------- */
+
+        if (
+            op === "ASL" ||
+            op === "LSR" ||
+            op === "ROL" ||
+            op === "ROR"
+        ) {
+            if (mode === "acc") {
+                this.A = this.shiftValue(op, this.A);
+                return instruction.cycles;
+            }
+
+            const address = this.getAddress(mode);
+            const oldValue = this.read(address);
+            const newValue = this.shiftValue(op, oldValue);
+
+            this.write(address, newValue);
+
+            return instruction.cycles;
+        }
+
+        /* -----------------------------------------------------
+           DEC
+           ----------------------------------------------------- */
+
+        if (op === "DEC") {
+            const address = this.getAddress(mode);
+
+            let value = (this.read(address) - 1) & 0xFF;
+
+            this.write(address, value);
+            this.setZN(value);
+
+            return instruction.cycles;
+        }
+
+        /* -----------------------------------------------------
+           INC
+           ----------------------------------------------------- */
+
+        if (op === "INC") {
+            const address = this.getAddress(mode);
+
+            let value = (this.read(address) + 1) & 0xFF;
+
+            this.write(address, value);
+            this.setZN(value);
+
+            return instruction.cycles;
+        }
+
+          /* ISC / ISB - Increment memory, then subtract */
+if (op === "ISC") {
+    const address = this.getAddress(mode);
+    const value = (this.read(address) + 1) & 0xFF;
+
+    this.write(address, value);
+    this.sbc(value);
+
+    return instruction.cycles;
+}
+
+          /* Stable undocumented NMOS 6502 instructions */
+
+        if (op === "LAX") {
+            const operand = this.readOperand(mode);
+            this.A = operand.value & 0xFF;
+            this.X = this.A;
+            this.setZN(this.A);
+
+            return instruction.cycles +
+                (instruction.pagePenalty && operand.pageCrossed ? 1 : 0);
+        }
+
+        if (op === "SAX") {
+            const address = this.getAddress(mode);
+            this.write(address, this.A & this.X);
+            return instruction.cycles;
+        }
+
+        if (op === "DCP") {
+            const address = this.getAddress(mode);
+            const value = (this.read(address) - 1) & 0xFF;
+
+            this.write(address, value);
+            this.compare(this.A, value);
+
+            return instruction.cycles;
+        }
+
+        if (
+            op === "SLO" ||
+            op === "RLA" ||
+            op === "SRE" ||
+            op === "RRA"
+        ) {
+            const address = this.getAddress(mode);
+            const oldValue = this.read(address);
+
+            let newValue;
+
+            if (op === "SLO") {
+                newValue = this.shiftValue("ASL", oldValue);
+            } else if (op === "RLA") {
+                newValue = this.shiftValue("ROL", oldValue);
+            } else if (op === "SRE") {
+                newValue = this.shiftValue("LSR", oldValue);
+            } else {
+                newValue = this.shiftValue("ROR", oldValue);
+            }
+
+            this.write(address, newValue);
+
+            if (op === "SLO") {
+                this.A = (this.A | newValue) & 0xFF;
+                this.setZN(this.A);
+            } else if (op === "RLA") {
+                this.A = (this.A & newValue) & 0xFF;
+                this.setZN(this.A);
+            } else if (op === "SRE") {
+                this.A = (this.A ^ newValue) & 0xFF;
+                this.setZN(this.A);
+            } else {
+                // ROR supplies the carry consumed by ADC.
+                this.adc(newValue);
+            }
+
+            return instruction.cycles;
+        }
+
+          /* ANC — undocumented NMOS 6502 instruction */
+        if (op === "ANC") {
+            const operand = this.readOperand(mode);
+
+            this.A = (this.A & operand.value) & 0xFF;
+            this.setZN(this.A);
+            this.setFlag(this.FLAG_C, (this.A & 0x80) !== 0);
+
+            return instruction.cycles;
+        }
+          
+        /* -----------------------------------------------------
+           Stores
+           ----------------------------------------------------- */
+
+        if (op === "STA") {
+            this.write(this.getAddress(mode), this.A);
+            return instruction.cycles;
+        }
+
+        if (op === "STX") {
+            this.write(this.getAddress(mode), this.X);
+            return instruction.cycles;
+        }
+
+        if (op === "STY") {
+            this.write(this.getAddress(mode), this.Y);
+            return instruction.cycles;
+        }
+
+        /* -----------------------------------------------------
+           Register operations
+           ----------------------------------------------------- */
+
+        switch (op) {
+            case "DEX":
+                this.X = (this.X - 1) & 0xFF;
+                this.setZN(this.X);
+                return instruction.cycles;
+
+            case "DEY":
+                this.Y = (this.Y - 1) & 0xFF;
+                this.setZN(this.Y);
+                return instruction.cycles;
+
+            case "INX":
+                this.X = (this.X + 1) & 0xFF;
+                this.setZN(this.X);
+                return instruction.cycles;
+
+            case "INY":
+                this.Y = (this.Y + 1) & 0xFF;
+                this.setZN(this.Y);
+                return instruction.cycles;
+
+            case "TAX":
+                this.X = this.A;
+                this.setZN(this.X);
+                return instruction.cycles;
+
+            case "TAY":
+                this.Y = this.A;
+                this.setZN(this.Y);
+                return instruction.cycles;
+
+            case "TSX":
+                this.X = this.SP;
+                this.setZN(this.X);
+                return instruction.cycles;
+
+            case "TXA":
+                this.A = this.X;
+                this.setZN(this.A);
+                return instruction.cycles;
+
+            case "TXS":
+                this.SP = this.X;
+                return instruction.cycles;
+
+            case "TYA":
+                this.A = this.Y;
+                this.setZN(this.A);
+                return instruction.cycles;
+
+            /* -------------------------------------------------
+               Flags
+               ------------------------------------------------- */
+
+            case "CLC":
+                this.setFlag(this.FLAG_C, false);
+                return instruction.cycles;
+
+            case "CLD":
+                this.setFlag(this.FLAG_D, false);
+                return instruction.cycles;
+
+            case "CLI":
+                this.setFlag(this.FLAG_I, false);
+                return instruction.cycles;
+
+            case "CLV":
+                this.setFlag(this.FLAG_V, false);
+                return instruction.cycles;
+
+            case "SEC":
+                this.setFlag(this.FLAG_C, true);
+                return instruction.cycles;
+
+            case "SED":
+                this.setFlag(this.FLAG_D, true);
+                return instruction.cycles;
+
+            case "SEI":
+                this.setFlag(this.FLAG_I, true);
+                return instruction.cycles;
+
+            /* -------------------------------------------------
+               Stack
+               ------------------------------------------------- */
+
+            case "PHA":
+                this.push(this.A);
+                return instruction.cycles;
+
+            case "PHP":
+                this.pushStatus(true);
+                return instruction.cycles;
+
+            case "PLA":
+                this.A = this.pop();
+                this.setZN(this.A);
+                return instruction.cycles;
+
+            case "PLP":
+                this.pullStatus();
+                return instruction.cycles;
+
+            /* -------------------------------------------------
+               JMP
+               ------------------------------------------------- */
+
+            case "JMP":
+                if (mode === "abs") {
+                    this.PC = this.addrAbsolute() & 0x1FFF;
+                } else {
+                    const pointer = this.addrAbsolute();
+
+                    this.PC =
+                        this.readIndirect6502Bug(pointer) & 0x1FFF;
+                }
+
+                return instruction.cycles;
+
+            /* -------------------------------------------------
+               JSR
+               ------------------------------------------------- */
+
+            case "JSR": {
+                const target = this.addrAbsolute();
+
+                const returnAddress =
+                    (this.PC - 1) & 0x1FFF;
+
+                this.push((returnAddress >> 8) & 0xFF);
+                this.push(returnAddress & 0xFF);
+
+                this.PC = target & 0x1FFF;
+
+                return instruction.cycles;
+            }
+
+            /* -------------------------------------------------
+               RTS
+               ------------------------------------------------- */
+
+            case "RTS": {
+                const lo = this.pop();
+                const hi = this.pop();
+
+                this.PC =
+                    ((lo | (hi << 8)) + 1) & 0x1FFF;
+
+                return instruction.cycles;
+            }
+
+            /* -------------------------------------------------
+               RTI
+               ------------------------------------------------- */
+
+            case "RTI": {
+                this.pullStatus();
+
+                const lo = this.pop();
+                const hi = this.pop();
+
+                this.PC =
+                    (lo | (hi << 8)) & 0x1FFF;
+
+                return instruction.cycles;
+            }
+
+            /* -------------------------------------------------
+               BRK
+               ------------------------------------------------- */
+
+            case "BRK": {
+                /*
+                 * BRK consumes the following byte as padding.
+                 */
+                this.fetchByte();
+
+                const returnAddress = this.PC;
+
+                this.push((returnAddress >> 8) & 0xFF);
+                this.push(returnAddress & 0xFF);
+
+                this.pushStatus(true);
+
+                this.setFlag(this.FLAG_I, true);
+
+                const lo = this.read(0x1FFE);
+                const hi = this.read(0x1FFF);
+
+                this.PC =
+                    ((lo | (hi << 8)) & 0x1FFF);
+
+                return instruction.cycles;
+            }
+
+            /* -------------------------------------------------
+               Branches
+               ------------------------------------------------- */
+
+             case "BCC":
+                return this.branch(!this.getFlag(this.FLAG_C));
+
+            case "BCS":
+                return this.branch(this.getFlag(this.FLAG_C));
+
+            case "BEQ":
+                return this.branch(this.getFlag(this.FLAG_Z));
+
+            case "BMI":
+                return this.branch(this.getFlag(this.FLAG_N));
+
+            case "BNE":
+                return this.branch(!this.getFlag(this.FLAG_Z));
+
+            case "BPL":
+                return this.branch(!this.getFlag(this.FLAG_N));
+
+            case "BVC":
+                return this.branch(!this.getFlag(this.FLAG_V));
+
+            case "BVS":
+                return this.branch(this.getFlag(this.FLAG_V));
+            case "KIL":
+                this.halted = true;
+                return instruction.cycles;
+            /* -------------------------------------------------
+               NOP
+               ------------------------------------------------- */
+
+            case "NOP": {
+                if (mode !== "imp" && mode !== "acc") {
+                    const operand = this.readOperand(mode);
+
+                    return instruction.cycles +
+                        (instruction.pagePenalty && operand.pageCrossed ? 1 : 0);
+                }
+
+                return instruction.cycles;
+            }
+
+            default:
+                throw new Error(
+                    "Unimplemented official 6507 instruction: " +
+                    op
+                );
+        }
+    }
+
+    /* =========================================================
+       RESET
+       ========================================================= */
+
+    reset() {
+        this.A = 0;
+        this.X = 0;
+        this.Y = 0;
+
+        this.SP = 0xFD;
+
+        /*
+         * The reset vector is at $FFFC/$FFFD on the
+         * 6502 address space. The 6507 only exposes 13
+         * address bits, so these become $1FFC/$1FFD.
+         */
+        const lo = this.read(0x1FFC);
+        const hi = this.read(0x1FFD);
+
+        this.PC =
+            ((lo | (hi << 8)) & 0x1FFF);
+
+        this.P = this.FLAG_U | this.FLAG_I;
+
+        this.halted = false;
+        this.waiting = false;
+        this.totalCycles = 0;
+    }
+
+    /* =========================================================
+       IRQ
+       ========================================================= */
+
+    irq() {
+        if (this.getFlag(this.FLAG_I)) {
+            return;
+        }
+
+        this.push((this.PC >> 8) & 0xFF);
+        this.push(this.PC & 0xFF);
+
+        this.pushStatus(false);
+
+        this.setFlag(this.FLAG_I, true);
+
+        const lo = this.read(0x1FFE);
+        const hi = this.read(0x1FFF);
+
+        this.PC =
+            ((lo | (hi << 8)) & 0x1FFF);
+
+        this.tick(7);
+    }
+
+    /* =========================================================
+       SINGLE CPU INSTRUCTION
+       ========================================================= */
+
+    step() {
+    if (this.halted) {
+        return 0;
+    }
+
+    if (this.waiting) {
+        return 0;
+    }
+
+    const opcodeAddress = this.PC;
+
+    const opcode = this.fetchByte();
+
+    const instruction = this.opcodes[opcode];
+
+    if (!instruction) {
+
+        /*
+         * The Atari 2600 software library contains cartridges
+         * that use undocumented 6502-family instructions.
+         *
+         * We do NOT silently treat an unknown opcode as NOP.
+         * For now report it clearly so we can add its real
+         * behavior.
+         */
+
+        this.halted = true;
+
+        throw new Error(
+            "Unsupported / undocumented 6507 opcode: $" +
+            opcode.toString(16)
+                .padStart(2, "0")
+                .toUpperCase() +
+            " at $" +
+            (opcodeAddress & 0x1FFF)
+                .toString(16)
+                .padStart(4, "0")
+                .toUpperCase()
+        );
+    }
+
+    const cycles = this.execute(instruction);
+
+    /*
+     * Some instructions, such as branches, calculate their
+     * own timing inside execute().
+     */
+    if (cycles > 0) {
+        this.tick(cycles);
+    }
+
+    /*
+     * Keep a running CPU-cycle counter.
+     *
+     * This is useful for debugging and, later, for exact
+     * CPU/TIA synchronization.
+     */
+    if (typeof this.totalCycles !== "number") {
+        this.totalCycles = 0;
+    }
+
+    const usedCycles = cycles > 0 ? cycles : 0;
+
+    this.totalCycles += usedCycles;
+
+    /*
+     * IMPORTANT:
+     * runFrame() needs to know how many CPU cycles this
+     * instruction consumed.
+     */
+    return usedCycles;
+}
+}
+
+
+/* =========================================================
+   EMULATOR
+========================================================= */
+
+class Atari2600 {
+
+    constructor() {
+
+        this.bus = new AtariBus();
+
+        this.cpu =
+            new CPU6507(this.bus);
+
+        this.running = false;
+
+        this.romName = "";
+
+        this.lastFrameTime = 0;
+
+        this.statusElement =
+            document.getElementById("status");
+
+        this.cpuInfoElement =
+            document.getElementById("cpuInfo");
+    }
+
+    loadROM(data, name) {
+
+        try {
+
+            this.bus.cartridge.load(data);
+
+            this.bus.reset();
+
+            this.cpu.reset();
+
+            this.romName =
+                name || "Unknown ROM";
+
+            this.statusElement.innerHTML =
+                '<span class="ok">' +
+                "ROM loaded: " +
+                this.romName +
+                " (" +
+                this.bus.cartridge.size +
+                " bytes)" +
+                "</span>";
+
+            this.updateCPUInfo();
+
+            return true;
+
+        } catch (error) {
+
+            console.error(error);
+
+            this.statusElement.innerHTML =
+                '<span class="warn">' +
+                error.message +
+                "</span>";
+
+            return false;
+        }
+    }
+
+    reset() {
+
+        if (!this.bus.cartridge.rom) {
+            return;
+        }
+
+        this.bus.reset();
+
+        this.cpu.reset();
+
+        this.statusElement.textContent =
+            "CPU reset. PC = $" +
+            this.cpu.PC
+                .toString(16)
+                .padStart(4, "0")
+                .toUpperCase();
+
+        this.updateCPUInfo();
+    }
+
+    updateCPUInfo() {
+
+        const cpu = this.cpu;
+
+        this.cpuInfoElement.textContent =
+            "6507  " +
+            "PC=$" +
+            cpu.PC
+                .toString(16)
+                .padStart(4, "0")
+                .toUpperCase() +
+
+            "  A=$" +
+            cpu.A
+                .toString(16)
+                .padStart(2, "0")
+                .toUpperCase() +
+
+            "  X=$" +
+            cpu.X
+                .toString(16)
+                .padStart(2, "0")
+                .toUpperCase() +
+
+            "  Y=$" +
+            cpu.Y
+                .toString(16)
+                .padStart(2, "0")
+                .toUpperCase() +
+
+            "  SP=$" +
+            cpu.SP
+                .toString(16)
+                .padStart(2, "0")
+                .toUpperCase() +
+
+            "  P=$" +
+            cpu.P
+                .toString(16)
+                .padStart(2, "0")
+                .toUpperCase() +
+
+            "  CYCLES=" +
+            cpu.totalCycles;
+    }
+
+    runFrame() {
+    if (!this.bus.cartridge.rom) {
+        return;
+    }
+
+    this.bus.syncControllerInputs();
+
+    const targetFrame = this.bus.tia.frameNumber + 1;
+    let safetyCycles = 0;
+
+    while (
+        this.bus.tia.frameNumber < targetFrame &&
+        !this.cpu.halted &&
+        !this.cpu.waiting
+    ) {
+        const used = this.cpu.step();
+
+        if (!Number.isFinite(used)) {
+            throw new Error("Invalid CPU cycle count");
+        }
+
+        if (used <= 0) {
+            break;
+        }
+
+        safetyCycles += used;
+
+        if (safetyCycles > 50000) {
+            throw new Error(
+                "TIA did not complete a frame within 50000 CPU cycles"
+            );
+        }
+    }
+
+    this.updateCPUInfo();
+}
+}
+
+
+/* =========================================================
+   CONSTANTS
+========================================================= */
+
+function cpuCyclesPerScanline() {
+
+    /*
+     * 228 TIA color clocks / 3
+     * = 76 CPU cycles.
+     */
+    return 76;
+}
+
+
+/* =========================================================
+   GLOBAL EMULATOR
+========================================================= */
+
+const emulator =
+    new Atari2600();
+
+
+/* =========================================================
+   ROM LIST
+========================================================= */
+
+const romSelect =
+    document.getElementById("romSelect");
+
+const loadSelectedButton =
+    document.getElementById("loadSelected");
+
+const fileInput =
+    document.getElementById("fileInput");
+
+const resetButton =
+    document.getElementById("resetButton");
+
+
+async function loadROMIndex() {
+
+    try {
+
+        const response =
+            await fetch(
+                "roms/index.json",
+                {
+                    cache: "no-store"
+                }
+            );
+
+        if (!response.ok) {
+            throw new Error(
+                "Could not load roms/index.json"
+            );
+        }
+
+        const list =
+            await response.json();
+
+        romSelect.innerHTML =
+            '<option value="">Select Atari 2600 ROM</option>';
+
+        for (const item of list) {
+
+            const path =
+                typeof item === "string"
+                    ? item
+                    : item.path;
+
+            if (!path) {
+                continue;
+            }
+
+            const option =
+                document.createElement("option");
+
+            option.value = path;
+
+            option.textContent =
+                path
+                    .split("/")
+                    .pop()
+                    .replace(/\.[^.]+$/, "");
+
+            romSelect.appendChild(option);
+        }
+
+        document.getElementById("status")
+            .textContent =
+            "ROM list loaded. Select an Atari 2600 cartridge.";
+
+    } catch (error) {
+
+        console.warn(error);
+
+        document.getElementById("status")
+            .textContent =
+            "ROM list could not be loaded. " +
+            "You can still use the file selector on PC.";
+    }
+}
+
+
+async function loadSelectedROM() {
+
+    const path =
+        romSelect.value;
+
+    if (!path) {
+        return;
+    }
+
+    try {
+
+        const response =
+            await fetch(
+                path,
+                {
+                    cache: "no-store"
+                }
+            );
+
+        if (!response.ok) {
+            throw new Error(
+                "Could not load ROM: " +
+                path
+            );
+        }
+
+        const buffer =
+            await response.arrayBuffer();
+
+        const name =
+            path
+                .split("/")
+                .pop();
+
+        emulator.loadROM(
+            new Uint8Array(buffer),
+            name
+        );
+
+    } catch (error) {
+
+        console.error(error);
+
+        document.getElementById("status")
+            .innerHTML =
+            '<span class="warn">' +
+            error.message +
+            "</span>";
+    }
+}
+
+
+fileInput.addEventListener(
+    "change",
+    async function() {
+
+        const file =
+            this.files &&
+            this.files[0];
+
+        if (!file) {
+            return;
+        }
+
+        try {
+
+            const buffer =
+                await file.arrayBuffer();
+
+            emulator.loadROM(
+                new Uint8Array(buffer),
+                file.name
+            );
+
+        } catch (error) {
+
+            console.error(error);
+
+            document.getElementById("status")
+                .innerHTML =
+                '<span class="warn">' +
+                error.message +
+                "</span>";
+        }
+    }
+);
+
+
+loadSelectedButton.addEventListener(
+    "click",
+    loadSelectedROM
+);
+
+
+resetButton.addEventListener(
+    "click",
+    function() {
+
+        emulator.reset();
+    }
+);
+
+
+/* =========================================================
+   KEYBOARD
+========================================================= */
+
+const keyMap = {
+
+    ArrowUp: "up",
+    ArrowDown: "down",
+    ArrowLeft: "left",
+    ArrowRight: "right",
+    " ": "fire"
+};
+
+
+document.addEventListener(
+    "keydown",
+    function(event) {
+
+        if (event.key === "r" ||
+            event.key === "R") {
+
+            emulator.reset();
+            return;
+        }
+
+        const control =
+            keyMap[event.key];
+
+        if (!control) {
+            return;
+        }
+
+        event.preventDefault();
+
+        emulator.bus.controller[control] =
+            true;
+    }
+);
+
+
+document.addEventListener(
+    "keyup",
+    function(event) {
+
+        const control =
+            keyMap[event.key];
+
+        if (!control) {
+            return;
+        }
+
+        event.preventDefault();
+
+        emulator.bus.controller[control] =
+            false;
+    }
+);
+
+
+/* =========================================================
+   ON-SCREEN CONTROLS
+========================================================= */
+
+document
+    .querySelectorAll(".control[data-control]")
+    .forEach(button => {
+
+        const control =
+            button.dataset.control;
+
+        function press(event) {
+
+            event.preventDefault();
+
+            emulator.bus.controller[control] =
+                true;
+        }
+
+        function release(event) {
+
+            event.preventDefault();
+
+            emulator.bus.controller[control] =
+                false;
+        }
+
+        button.addEventListener(
+            "pointerdown",
+            press
+        );
+
+        button.addEventListener(
+            "pointerup",
+            release
+        );
+
+        button.addEventListener(
+            "pointercancel",
+            release
+        );
+
+        button.addEventListener(
+            "pointerleave",
+            release
+        );
+
+        button.addEventListener(
+            "touchstart",
+            press,
+            {
+                passive: false
+            }
+        );
+
+        button.addEventListener(
+            "touchend",
+            release,
+            {
+                passive: false
+            }
+        );
+    });
+
+
+/* =========================================================
+   MAIN LOOP
+========================================================= */
+
+
+function frameLoop(timestamp) {
+    if (!emulator.lastFrameTime) {
+        emulator.lastFrameTime = timestamp;
+    }
+
+    if (emulator.bus.cartridge.rom && !emulator.cpu.halted) {
+        try {
+            emulator.runFrame();
+        } catch (error) {
+            console.error("Atari 2600 emulator error:", error);
+            emulator.cpu.halted = true;
+            document.getElementById("status").textContent =
+                "EMULATOR ERROR: " + error.message;
+        }
+    }
+
+    requestAnimationFrame(frameLoop);
+}
+/* =========================================================
+   START
+========================================================= */
+
+loadROMIndex();
+
+requestAnimationFrame(frameLoop);
+
+</script>
+
+</body>
+</html>
