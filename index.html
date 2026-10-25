@@ -509,18 +509,10 @@ class Riot {
        ========================================================= */
 
     isRAMAddress(address) {
-        /*
-         * RIOT RAM:
-         *
-         * $0080-$00FF
-         *
-         * The RAM is mirrored throughout the appropriate
-         * RIOT address decoding regions.
-         */
-        return (
-            (address & 0x0180) === 0x0080
-        );
-    }
+    return (
+        (address & 0x0280) === 0x0080
+    );
+}
 
     ramAddress(address) {
         return address & 0x7F;
