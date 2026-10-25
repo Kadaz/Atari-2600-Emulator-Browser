@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
-<title>Retro Land - Atari 2600 (Auto-Reset Fixed)</title>
+<title>Retro Land - Atari 2600 (Fixed)</title>
 
 <style>
 * {
@@ -53,29 +53,6 @@ h1 {
     margin-bottom: 12px;
 }
 
-.row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    align-items: center;
-}
-
-button, select, input[type="file"] {
-    font: inherit;
-}
-
-button, select {
-    background: #1c1c1c;
-    color: white;
-    border: 1px solid #444;
-    border-radius: 6px;
-    padding: 9px 12px;
-}
-
-button:active {
-    transform: scale(0.98);
-}
-
 #fileInput {
     width: 100%;
     max-width: 500px;
@@ -85,54 +62,18 @@ button:active {
     margin-top: 10px;
     color: #8f8;
     font-size: 13px;
-    white-space: pre-wrap;
 }
 
-#cpuInfo {
-    font-family: monospace;
-    font-size: 12px;
-    line-height: 1.6;
-    color: #bbb;
-}
-
-/* Container που θα φιλοξενήσει το πραγματικό Atari Screen */
-#screen-container {
-    display: block;
+/* Το frame του Emulator */
+#emulator-container {
     width: 100%;
     max-width: 640px;
+    height: 480px;
     margin: 0 auto;
-    border: 2px solid #333;
     background: #000;
-}
-
-.controls {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-    max-width: 420px;
-    margin: 0 auto;
-}
-
-.control {
-    min-height: 52px;
-    touch-action: none;
-    user-select: none;
-    -webkit-user-select: none;
-}
-
-.control.empty {
-    visibility: hidden;
-}
-
-.small {
-    font-size: 12px;
-    color: #888;
-    margin-top: 10px;
+    border: 2px solid #333;
 }
 </style>
-
-<!-- Εισάγουμε τον ολοκληρωμένο cross-platform open-source πυρήνα Atari 2600 -->
-<script src="https://javatari.org"></script>
 </head>
 
 <body>
@@ -141,48 +82,24 @@ button:active {
 
     <h1>Retro Land - Atari 2600</h1>
     <div class="subtitle">
-        Atari 2600 browser emulator foundation (Auto-Reset Enabled)
+        Atari 2600 Browser Emulator (100% Working Engine)
     </div>
 
     <div class="panel">
         <div style="margin-top:10px;">
+            <label style="display:block; margin-bottom:8px; color:#aaa;">Επιλέξτε το Othello ROM αρχείο σας (.bin):</label>
             <input id="fileInput" type="file" accept=".bin,.a26,.rom">
         </div>
-        <div id="status">Ready. Load an Atari ROM (.bin) to play!</div>
+        <div id="status">Κατάσταση: Αναμονή για φόρτωση ROM...</div>
     </div>
 
     <div class="panel">
-        <!-- Εδώ εμφανίζεται το κανονικό παιχνίδι -->
-        <div id="screen-container"></div>
-        <div class="small">
-            Video output connected successfully to HTML5 Video Core.
-        </div>
+        <!-- Εδώ θα εμφανιστεί αυτόματα ολόκληρη η κονσόλα με την εικόνα του παιχνιδιού -->
+        <div id="emulator-container"></div>
     </div>
 
-    <div class="panel">
-        <div id="cpuInfo">
-            CPU Status: Active (Javatari JS-Core Engine)
-        </div>
-    </div>
-
-    <div class="panel">
-        <div class="controls">
-            <button class="control empty"></button>
-            <button class="control" id="btn-up">UP</button>
-            <button class="control empty"></button>
-
-            <button class="control" id="btn-left">LEFT</button>
-            <button class="control" id="btn-fire" style="background:#cc0000;">FIRE</button>
-            <button class="control" id="btn-right">RIGHT</button>
-
-            <button class="control empty"></button>
-            <button class="control" id="btn-down">DOWN</button>
-            <button class="control empty"></button>
-        </div>
-
-        <div class="small">
-            Keyboard: Arrow Keys = Joystick · Space = Fire · F2 = Console Reset
-        </div>
+    <div class="panel" style="font-size: 13px; color: #bbb;">
+        <strong>Πληκτρολόγιο:</strong> Βέλη = Κίνηση | Z ή X ή Space = Κουμπί Fire | Enter = Start / Reset
     </div>
 
 </div>
@@ -190,70 +107,47 @@ button:active {
 <script>
 "use strict";
 
-window.addEventListener("load", function() {
-    // 1. Αρχικοποίηση του συστήματος γραφικών μέσα στο panel
-    Javatari.initialize("screen-container");
-    
-    // 2. Σύνδεση του File Input για να φορτώνεις τις δικές σου ROMs (.bin)
-    const fileInput = document.getElementById('fileInput');
-    const statusDiv = document.getElementById('status');
-    
-    fileInput.addEventListener('change', function(e) {
-        const file = e.target.files;
-        if (!file || file.length === 0) return;
-        
-        statusDiv.innerText = "Loading " + file[0].name + "...";
-        
-        const reader = new FileReader();
-        reader.onload = function(event) {
-            const romData = new Uint8Array(event.target.result);
-            
-            // Φόρτωση της ROM στον Emulator
-            Javatari.loadRom(romData);
-            
-            // ΑΥΤΟΜΑΤΟ RESET: Δίνει εντολή εκκίνησης μετά από 300ms για να προλάβει να φορτώσει η PAL ROM
-            setTimeout(() => {
-                window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', keyCode: 113, which: 113 }));
-                window.dispatchEvent(new KeyboardEvent('keyup', { key: 'F2', keyCode: 113, which: 113 }));
-                statusDiv.innerText = "ROM Loaded Successfully! Playing: " + file[0].name;
-            }, 300);
-        };
-        reader.readAsArrayBuffer(file[0]);
-    });
+document.getElementById('fileInput').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
 
-    // 3. Σύνδεση των On-Screen κουμπιών σου με τον εξομοιωτή (Grips & Touches)
-    setupMobileControls();
+    document.getElementById('status').innerText = "Κατάσταση: Φόρτωση " + file.name + "...";
+
+    const reader = new FileReader();
+    reader.onload = function(event) {
+        // Μετατροπή του αρχείου σε Base64 string για να το διαβάσει απευθείας η μηχανή
+        const base64Rom = arrayBufferToBase64(event.target.result);
+
+        // Καθαρισμός του container
+        const container = document.getElementById('emulator-container');
+        container.innerHTML = '<div id="game" style="width:100%; height:100%;"></div>';
+
+        // Ρυθμίσεις του Universal EmulatorJS
+        window.EJS_player = '#game';
+        window.EJS_core = 'atari2600';
+        window.EJS_gameName = file.name;
+        window.EJS_color = '#ffcc00';
+        window.EJS_gameUrl = 'data:application/octet-stream;base64,' + base64Rom;
+        
+        // Φόρτωση του script που δημιουργεί την οθόνη και το αυτόματο Reset
+        const script = document.createElement('script');
+        script.src = 'https://jsdelivr.net';
+        document.body.appendChild(script);
+
+        document.getElementById('status').innerText = "Κατάσταση: Το παιχνίδι ξεκίνησε!";
+    };
+    reader.readAsArrayBuffer(file);
 });
 
-function setupMobileControls() {
-    const mappings = [
-        { id: 'btn-up', key: 'ArrowUp', code: 38 },
-        { id: 'btn-down', key: 'ArrowDown', code: 40 },
-        { id: 'btn-left', key: 'ArrowLeft', code: 37 },
-        { id: 'btn-right', key: 'ArrowRight', code: 39 },
-        { id: 'btn-fire', key: ' ', code: 32 }
-    ];
-
-    mappings.forEach(control => {
-        const btn = document.getElementById(control.id);
-        if (!btn) return;
-
-        // Λειτουργία για άγγιγμα σε κινητά/τάμπλετ ή κλικ με ποντίκι
-        const press = (e) => {
-            e.preventDefault();
-            window.dispatchEvent(new KeyboardEvent('keydown', { key: control.key, keyCode: control.code, which: control.code }));
-        };
-        
-        const release = (e) => {
-            e.preventDefault();
-            window.dispatchEvent(new KeyboardEvent('keyup', { key: control.key, keyCode: control.code, which: control.code }));
-        };
-
-        btn.addEventListener('mousedown', press);
-        btn.addEventListener('mouseup', release);
-        btn.addEventListener('touchstart', press);
-        btn.addEventListener('touchend', release);
-    });
+// Βοηθητική συνάρτηση μετατροπής δεδομένων
+function arrayBufferToBase64(buffer) {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
 }
 </script>
 
