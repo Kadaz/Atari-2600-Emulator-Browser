@@ -959,6 +959,7 @@ class TIA {
 
         this.colorClock = 0;
         this.scanline = 0;
+        this.frameNumber = 0;  
 
         this.vsync = false;
         this.vblank = false;
@@ -993,6 +994,7 @@ class TIA {
 
         this.colorClock = 0;
         this.scanline = 0;
+        this.frameNumber = 0;  
 
         this.vsync = false;
         this.vblank = false;
@@ -1350,8 +1352,9 @@ class TIA {
                 this.scanline++;
 
                 if (this.scanline >= 262) {
-                    this.scanline = 0;
-                    this.present();
+                   this.scanline = 0;
+                   this.frameNumber++;
+                   this.present();
                 }
 
                 this.wsync = false;
@@ -3193,27 +3196,35 @@ class Atari2600 {
     if (!this.bus.cartridge.rom) {
         return;
     }
+
     this.bus.syncControllerInputs();
-    const target = cpuCyclesPerScanline() * 262;
-    let executed = 0;
+
+    const targetFrame = this.bus.tia.frameNumber + 1;
+    let safetyCycles = 0;
 
     while (
-    executed < target &&
-    !this.cpu.halted &&
-    !this.cpu.waiting
-) {
-    const used = this.cpu.step();
+        this.bus.tia.frameNumber < targetFrame &&
+        !this.cpu.halted &&
+        !this.cpu.waiting
+    ) {
+        const used = this.cpu.step();
 
-    if (!Number.isFinite(used)) {
-        throw new Error("Invalid CPU cycle count");
+        if (!Number.isFinite(used)) {
+            throw new Error("Invalid CPU cycle count");
+        }
+
+        if (used <= 0) {
+            break;
+        }
+
+        safetyCycles += used;
+
+        if (safetyCycles > 50000) {
+            throw new Error(
+                "TIA did not complete a frame within 50000 CPU cycles"
+            );
+        }
     }
-
-    if (used <= 0) {
-        break;
-    }
-
-    executed += used;
-}
 
     this.updateCPUInfo();
 }
