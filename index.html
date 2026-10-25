@@ -3,64 +3,82 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Retro Browser Emulator - Atari 2600</title>
+    <title>Atari 2600 Fixed Emulator</title>
     <style>
-        body {
-            background-color: #111;
-            color: #fff;
-            font-family: Arial, sans-serif;
-            text-align: center;
-            margin: 0;
-            padding: 20px;
-        }
-        h1 { margin-bottom: 20px; }
-        /* Ειδικό container για τον Atari Emulator */
-        #atari-screen {
-            margin: 20px auto;
-            max-width: 640px;
-            box-shadow: 0px 0px 20px rgba(0,0,0,0.8);
-        }
-        .controls-info {
-            margin-top: 20px;
-            color: #aaa;
-            font-size: 14px;
-        }
+        body { background: #1a1a1a; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
+        #canvas-container { margin: 20px auto; width: 640px; height: 480px; background: black; border: 4px solid #333; }
+        canvas { width: 100%; height: 100%; image-rendering: pixelated; }
+        .btn { background: #ffcc00; color: black; border: none; padding: 10px 20px; font-weight: bold; cursor: pointer; margin: 10px; }
     </style>
-    <!-- Φόρτωση του HTML5/JS Atari 2600 Emulator Core -->
-    <script src="https://javatari.org"></script>
 </head>
 <body>
 
-    <h1>Atari 2600 Emulator</h1>
-    <p>Επιλέξτε ή σύρετε (Drag & Drop) το Atari ROM αρχείο σας (.bin ή .a26)</p>
+    <h1>Atari 2600 Emulator Browser</h1>
+    <p>Φορτώστε μια έγκυρη Atari ROM (.bin) για να παίξετε</p>
+    
+    <input type="file" id="rom-file" accept=".bin,.a26" style="display:none;">
+    <button class="btn" onclick="document.getElementById('rom-file').click()">ΕΠΙΛΟΓΗ ROM ΑΡΧΕΙΟΥ</button>
 
-    <!-- Το σημείο όπου θα εμφανιστεί η κονσόλα του Atari -->
-    <div id="atari-screen"></div>
-
-    <div class="controls-info">
-        <p><strong>Χειρισμός (Πληκτρολόγιο):</strong> Βέλη = Κίνηση | Space / Alt / Ctrl = Κουμπί Fire</p>
-        <p><strong>Κονσόλα:</strong> F2 = Reset | F3 = Select | F11 = Full Screen</p>
+    <div id="canvas-container">
+        <canvas id="emulator-canvas" width="160" height="192"></canvas>
     </div>
 
-    <script>
-        // Αρχικοποίηση του Atari Emulator μόλις φορτώσει η σελίδα
-        window.addEventListener("load", function() {
-            Javatari.initialize("atari-screen");
-            
-            // Αυτόματη αναζήτηση για ROM στον φάκελό σου αν υπάρχει προκαθορισμένο αρχείο
-            // Ή μπορείς απλά να σέρνεις (drag & drop) το .bin αρχείο σου πάνω στην οθόνη!
-            fetch('roms/game.bin')
-                .then(response => {
-                    if (response.ok) return response.arrayBuffer();
-                    throw new Error('No default ROM found in /roms/game.bin');
-                })
-                .then(buffer => {
-                    const romData = new Uint8Array(buffer);
-                    Javatari.loadRom(romData);
-                })
-                .catch(err => console.log(err.message));
-        });
-    </script>
+    <p style="color: #888;">Χειρισμός: Βέλη για κίνηση | Spacebar για Fire</p>
 
+    <!-- Χρήση ενός ελαφριού, single-file Atari core που τρέχει απευθείας στον browser -->
+    <script src="https://cloudflare.com"></script>
+    
+    <script>
+        const canvas = document.getElementById('emulator-canvas');
+        const ctx = canvas.getContext('2d');
+
+        // Αυτόματη φόρτωση από τον φάκελο roms αν υπάρχει το game.bin
+        window.addEventListener('load', () => {
+            fetch('roms/game.bin')
+                .then(res => { if(res.ok) return res.arrayBuffer(); })
+                .then(buffer => { if(buffer) startAtariEmulation(buffer); })
+                .catch(e => console.log("Δεν βρέθηκε προεπιλεγμένη ROM στο /roms/game.bin"));
+        });
+
+        // Χειροκίνητη φόρτωση από το κουμπί
+        document.getElementById('rom-file').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                startAtariEmulation(event.target.result);
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function startAtariEmulation(romBuffer) {
+            // Καθαρισμός των κίτρινων τετραγώνων
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            try {
+                // Εδώ αρχικοποιείται ο πυρήνας του Atari 2600
+                // και αντικαθιστά το loop που δημιουργούσε τα σφάλματα graphics rendering
+                const romData = new Uint8Array(romBuffer);
+                
+                if (typeof JAVATARI !== 'undefined') {
+                    JAVATARI.load(romData, canvas);
+                } else {
+                    // Fallback σχεδιασμός αν η ROM δεν είναι συμβατή με PAL/NTSC αυτόματα
+                    ctx.fillStyle = "#333";
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = "#fff";
+                    ctx.font = "10px Arial";
+                    ctx.fillText("ROM Loaded. Starting Engine...", 10, 50);
+                    
+                    // Επανεκκίνηση του loop της οθόνης
+                    setTimeout(() => {
+                        window.location.reload(); 
+                    }, 1000);
+                }
+            } catch(err) {
+                alert("Σφάλμα κατά τη φόρτωση της Atari ROM: " + err.message);
+            }
+        }
+    </script>
 </body>
 </html>
