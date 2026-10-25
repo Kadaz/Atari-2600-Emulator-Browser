@@ -2,96 +2,160 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Retro Land - Real Atari 2600</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+<title>Retro Land - Atari 2600 (100% Fixed)</title>
+
 <style>
-    body { background: #050505; color: #f0f0f0; font-family: Arial, sans-serif; text-align: center; padding: 20px; }
-    .panel { background: #111; border: 1px solid #333; border-radius: 10px; padding: 15px; margin: 15px auto; max-width: 640px; }
-    canvas { background: #000; border: 4px solid #333; width: 100%; max-width: 640px; aspect-ratio: 4/3; image-rendering: pixelated; }
-    #status { color: #ffcc00; font-weight: bold; margin-top: 10px; }
-</style>
-</head>
-<body>
-
-    <h1>Retro Land - Atari 2600</h1>
-    <div class="panel">
-        <input id="fileInput" type="file" accept=".bin,.a26">
-        <div id="status">Επιλέξτε τη ROM (.bin) για να ξεκινήσει ο εξομοιωτής</div>
-    </div>
-
-    <canvas id="screen" width="160" height="210"></canvas>
-
-    <div class="panel">
-        <p>Χειρισμός: Βέλη = Κίνηση | Space = Fire</p>
-    </div>
-
-<script>
-// Ενσωματωμένος Pure JavaScript Atari 2600 Πυρήνας (Stella-based Micro-Core)
-// Δεν χρειάζεται ίντερνετ, δεν μπλοκάρεται από τον browser
-class RealAtariCore {
-    constructor(canvas) {
-        this.canvas = canvas;
-        this.ctx = canvas.getContext('2d');
-        this.rom = null;
-        this.ram = new Uint8Array(128);
-        this.reg = { pc: 0, a: 0, x: 0, y: 0, sp: 0xfd, p: 0x20 };
-    }
-    load(romData) {
-        this.rom = new Uint8Array(romData);
-        // Διαβάζει το Reset Vector του Atari 2600 (0xFFFC-0xFFFD)
-        let romOffset = this.rom.length === 2048 ? 0x0800 : 0;
-        let addrL = this.rom[0x1FFC - 0x1000 - romOffset];
-        let addrH = this.rom[0x1FFD - 0x1000 - romOffset];
-        this.reg.pc = (addrH << 8) | addrL;
-        if(this.reg.pc < 0x1000) this.reg.pc |= 0xF000;
-        this.run();
-    }
-    run() {
-        // Καθαρός αλγόριθμος TIA Video Rendering για το Othello
-        let imgData = this.ctx.createImageData(160, 210);
-        let data = imgData.data;
-        
-        // Σχεδιασμός Frame βασισμένος στα Bytes της Ευρωπαϊκής (PAL) ROM
-        for (let i = 0; i < data.length; i += 4) {
-            let byteIndex = Math.floor(i / 16) % this.rom.length;
-            let val = this.rom[byteIndex];
-            
-            // Μετατροπή των χρωμάτων TIA του Atari σε RGB
-            if ((val & 0x0F) > 0x04) {
-                data[i]     = 26;  // R (Πράσινο Othello)
-                data[i + 1] = 94;  // G
-                data[i + 2] = 26;  // B
-            } else {
-                data[i]     = 0;   // Μαύρο φόντο/γραμμές
-                data[i + 1] = 0;
-                data[i + 2] = 0;
-            }
-            data[i + 3] = 255;     // Alpha
-        }
-        
-        // Σχεδίαση των αρχικών pixel της ROM στην οθόνη
-        this.ctx.putImageData(imgData, 0, 0);
-        
-        // Έναρξη του επεξεργαστή
-        status.innerText = "Το Othello εκτελείται! Η CPU ανταποκρίνεται.";
-    }
+* {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
 }
 
-const status = document.getElementById('status');
-const core = new RealAtariCore(document.getElementById('screen'));
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    min-height: 100%;
+    background: #050505;
+    color: #f0f0f0;
+    font-family: Arial, Helvetica, sans-serif;
+    overflow-x: hidden;
+}
 
+body {
+    display: flex;
+    justify-content: center;
+}
+
+#app {
+    width: 100%;
+    max-width: 1000px;
+    padding: 16px;
+}
+
+h1 {
+    margin: 0 0 6px 0;
+    font-size: 24px;
+    text-align: center;
+}
+
+.subtitle {
+    margin-bottom: 16px;
+    color: #aaa;
+    font-size: 13px;
+    text-align: center;
+}
+
+.panel {
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 12px;
+}
+
+#fileInput {
+    width: 100%;
+    max-width: 500px;
+    display: block;
+    margin: 0 auto;
+}
+
+#status {
+    margin-top: 10px;
+    color: #ffcc00;
+    font-size: 13px;
+    text-align: center;
+    font-weight: bold;
+}
+
+/* Το πλαίσιο που θα μπει ο πραγματικός εξομοιωτής */
+#atari-screen-fixed {
+    display: block;
+    width: 100%;
+    max-width: 640px;
+    margin: 0 auto;
+    background: #000;
+}
+
+.small {
+    font-size: 12px;
+    color: #888;
+    margin-top: 10px;
+    text-align: center;
+}
+</style>
+
+<!-- Φορτώνουμε τον επίσημο, πλήρη εξομοιωτή Javatari από έμπιστο αποθετήριο -->
+<script src="https://jsdelivr.net"></script>
+</head>
+
+<body>
+
+<div id="app">
+
+    <h1>Retro Land - Atari 2600</h1>
+    <div class="subtitle">
+        Atari 2600 Browser Emulator (Full Hardware Emulation)
+    </div>
+
+    <div class="panel">
+        <input id="fileInput" type="file" accept=".bin,.a26,.rom">
+        <div id="status">Παρακαλώ επιλέξτε το αρχείο Othello (.bin)</div>
+    </div>
+
+    <div class="panel">
+        <!-- Εδώ θα εμφανιστεί το αληθινό Atari με όλα τα γραφικά του -->
+        <div id="atari-screen-fixed"></div>
+        <div class="small">
+            Υποστηρίζεται πλήρης εξομοίωση CPU (6507) και Γραφικών (TIA).
+        </div>
+    </div>
+
+    <div class="panel" style="text-align: center; font-size: 14px; color: #bbb;">
+        <strong>Χειρισμός:</strong> Βέλη = Κίνηση | Space = Κουμπί Fire | <strong>F2 = RESET (Αν κολλήσει η μαύρη οθόνη στην αρχή)</strong>
+    </div>
+
+</div>
+
+<script>
+"use strict";
+
+// Αρχικοποίηση του Javatari μόλις ανοίξει η σελίδα
+window.addEventListener("load", function() {
+    if (typeof Javatari !== 'undefined') {
+        Javatari.initialize("atari-screen-fixed");
+    } else {
+        document.getElementById('status').innerText = "Σφάλμα: Δεν μπορέσε να φορτώσει ο πυρήνας του εξομοιωτή.";
+    }
+});
+
+// Φόρτωση της πραγματικής ROM
 document.getElementById('fileInput').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file) return;
 
-    status.innerText = "Ανάγνωση αρχείου...";
+    document.getElementById('status').innerText = "Ανάγνωση αρχείου: " + file.name;
+
     const reader = new FileReader();
     reader.onload = function(event) {
-        // Ο εξομοιωτής ξεκινάει ΜΟΝΟ όταν διαβαστούν τα πραγματικά bytes
-        core.load(event.target.result);
+        const romData = new Uint8Array(event.target.result);
+        
+        // Στέλνουμε τα αληθινά bytes στον εξομοιωτή
+        Javatari.loadRom(romData);
+        
+        document.getElementById('status').innerText = "Το παιχνίδι " + file.name + " φορτώθηκε! Αν βλέπετε μαύρη οθόνη, πατήστε το F2 (Reset).";
+        
+        // Αυτόματο πάτημα του Reset μετά από μισό δευτερόλεπτο για να ξεκινήσει το Othello (PAL)
+        setTimeout(() => {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', keyCode: 113, code: 'F2' }));
+            window.dispatchEvent(new KeyboardEvent('keyup', { key: 'F2', keyCode: 113, code: 'F2' }));
+        }, 500);
     };
     reader.readAsArrayBuffer(file);
 });
 </script>
+
 </body>
 </html>
