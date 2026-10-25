@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
-<title>Retro Land - Atari 2600 (Fixed)</title>
+<title>Retro Land - Atari 2600 (Auto-Reset Fixed)</title>
 
 <style>
 * {
@@ -141,7 +141,7 @@ button:active {
 
     <h1>Retro Land - Atari 2600</h1>
     <div class="subtitle">
-        Atari 2600 browser emulator foundation (Graphics & CPU Fixed)
+        Atari 2600 browser emulator foundation (Auto-Reset Enabled)
     </div>
 
     <div class="panel">
@@ -152,7 +152,7 @@ button:active {
     </div>
 
     <div class="panel">
-        <!-- Εδώ θα εμφανίζεται το κανονικό παιχνίδι χωρίς κίτρινα τετράγωνα -->
+        <!-- Εδώ εμφανίζεται το κανονικό παιχνίδι -->
         <div id="screen-container"></div>
         <div class="small">
             Video output connected successfully to HTML5 Video Core.
@@ -181,7 +181,7 @@ button:active {
         </div>
 
         <div class="small">
-            Keyboard: Arrow Keys = Joystick · Space = Fire
+            Keyboard: Arrow Keys = Joystick · Space = Fire · F2 = Console Reset
         </div>
     </div>
 
@@ -191,7 +191,7 @@ button:active {
 "use strict";
 
 window.addEventListener("load", function() {
-    // 1. Αρχικοποίηση του συστήματος γραφικών μέσα στο panel σου
+    // 1. Αρχικοποίηση του συστήματος γραφικών μέσα στο panel
     Javatari.initialize("screen-container");
     
     // 2. Σύνδεση του File Input για να φορτώνεις τις δικές σου ROMs (.bin)
@@ -199,19 +199,26 @@ window.addEventListener("load", function() {
     const statusDiv = document.getElementById('status');
     
     fileInput.addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (!file) return;
+        const file = e.target.files;
+        if (!file || file.length === 0) return;
         
-        statusDiv.innerText = "Loading " + file.name + "...";
+        statusDiv.innerText = "Loading " + file[0].name + "...";
         
         const reader = new FileReader();
         reader.onload = function(event) {
             const romData = new Uint8Array(event.target.result);
+            
             // Φόρτωση της ROM στον Emulator
             Javatari.loadRom(romData);
-            statusDiv.innerText = "ROM Loaded Successfully! Playing: " + file.name;
+            
+            // ΑΥΤΟΜΑΤΟ RESET: Δίνει εντολή εκκίνησης μετά από 300ms για να προλάβει να φορτώσει η PAL ROM
+            setTimeout(() => {
+                window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', keyCode: 113, which: 113 }));
+                window.dispatchEvent(new KeyboardEvent('keyup', { key: 'F2', keyCode: 113, which: 113 }));
+                statusDiv.innerText = "ROM Loaded Successfully! Playing: " + file[0].name;
+            }, 300);
         };
-        reader.readAsArrayBuffer(file);
+        reader.readAsArrayBuffer(file[0]);
     });
 
     // 3. Σύνδεση των On-Screen κουμπιών σου με τον εξομοιωτή (Grips & Touches)
